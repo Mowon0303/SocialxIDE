@@ -1,0 +1,159 @@
+:host {
+  display: grid;
+  grid-template-rows: 29px minmax(0, 1fr);
+  min-height: 0;
+  position: relative;
+}
+
+.terminal-session-bar {
+  align-items: stretch;
+  background: #141414;
+  border-bottom: 1px solid #b89a2c;
+  display: flex;
+  min-height: 29px;
+  overflow: hidden;
+}
+
+.terminal-session-bar button {
+  background: transparent;
+  border: 0;
+  color: #b89a2c;
+  cursor: pointer;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 0 9px;
+  text-transform: uppercase;
+}
+
+.terminal-tab {
+  border-right: 1px solid #b89a2c;
+  display: grid;
+  grid-template-columns: minmax(78px, 1fr) 25px 25px;
+  max-width: 220px;
+  min-width: 146px;
+}
+
+.terminal-tab.active {
+  background: #faeab5;
+  color: #1a1a1a;
+}
+
+.terminal-tab.exited:not(.active) {
+  opacity: 0.72;
+}
+
+.terminal-tab-main {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  padding: 3px 8px 2px;
+  text-align: left;
+}
+
+.terminal-tab-main span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-tab-main small {
+  color: inherit;
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  opacity: 0.76;
+}
+
+.terminal-tab-action {
+  border-left: 1px solid rgba(184, 154, 44, 0.45) !important;
+  padding: 0 !important;
+}
+
+.terminal-tab.active .terminal-tab-action,
+.terminal-tab.active .terminal-tab-main {
+  color: #1a1a1a;
+}
+
+.terminal-rename {
+  align-items: center;
+  display: grid;
+  gap: 4px;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  padding: 3px 5px;
+}
+
+.terminal-rename input {
+  background: #1a1a1a;
+  border: 1px solid #b89a2c;
+  color: #faeab5;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9px;
+  font-weight: 800;
+  height: 21px;
+  min-width: 0;
+  outline: none;
+  padding: 0 5px;
+  text-transform: uppercase;
+}
+
+.terminal-rename button {
+  background: #e8c547;
+  color: #1a1a1a;
+  height: 21px;
+  padding: 0;
+}
+
+.terminal-session-bar button.terminal-new {
+  color: #e8c547;
+  font-size: 14px;
+  min-width: 34px;
+  padding: 0;
+}
+
+.terminal-session-bar button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.desktop-terminal-host {
+  background: #1a1a1a;
+  min-height: 0;
+  overflow: hidden;
+  padding: 7px 8px;
+}
+
+.terminal-disabled {
+  color: #e8c547;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 800;
+  left: 16px;
+  letter-spacing: 0.08em;
+  position: absolute;
+  text-transform: uppercase;
+  top: 50px;
+  z-index: 2;
+}
+
+.terminal-notice {
+  background: #faeab5;
+  border: 1px solid #b89a2c;
+  color: #1a1a1a;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  padding: 4px 7px;
+  position: absolute;
+  right: 10px;
+  text-transform: uppercase;
+  top: 36px;
+  z-index: 3;
+}
+
+.desktop-terminal-host.is-disabled {
+  opacity: 0.36;
+}

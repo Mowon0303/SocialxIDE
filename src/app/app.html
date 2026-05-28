@@ -1,0 +1,1649 @@
+<div class="studio-shell" [class.is-focused]="focusedScreen !== null">
+  <header class="studio-nav">
+    <div class="studio-brand">
+      <strong>Codeyo</strong>
+      <span>Editorial Lounge Design Canvas</span>
+    </div>
+
+    <nav aria-label="Screens">
+      <button type="button" (click)="focusScreen('channels')">§01 Channels</button>
+      <button type="button" (click)="focusScreen('dm')">§02 DM</button>
+      <button type="button" (click)="focusScreen('command')">§03 Command</button>
+      <button type="button" (click)="focusScreen('components')">§04 Sheet</button>
+    </nav>
+
+    <button class="studio-reset" type="button" (click)="clearFocus()" [disabled]="focusedScreen === null">
+      View All
+    </button>
+  </header>
+
+  <main class="design-canvas">
+    <section class="artboard channels-board" [class.is-hidden]="focusedScreen !== null && focusedScreen !== 'channels'">
+      <button class="focus-chip" type="button" (click)="focusScreen('channels')">Focus</button>
+
+      <div class="channels-layout">
+        <aside class="left-rail">
+          <div class="server-card">
+            <span class="mono tiny">Server 01 / 5</span>
+            <h2>PY 一起学</h2>
+            <div class="avatar-stack">
+              <span class="avatar blue">K</span>
+              <span class="avatar green">P</span>
+              <span class="avatar coral">J</span>
+              <span class="avatar minty">小</span>
+              <span class="avatar muted">+83</span>
+            </div>
+          </div>
+
+          <div class="section-label"><span>§01</span><b>Channels</b><i></i></div>
+          <div class="channel-list">
+            <button class="channel active" type="button"><em>01</em><span>作业互助</span></button>
+            <button class="channel unread" type="button"><em>02</em><span>日常水群</span><b>12</b></button>
+            <button class="channel mention" type="button"><em>03</em><span>新人报到</span><b>1</b></button>
+            <button class="channel" type="button"><em>04</em><span>资源分享</span></button>
+            <button class="channel" type="button"><em>05</em><span>bug-救救我</span><strong>•</strong></button>
+          </div>
+
+          <div class="section-label"><span>§02</span><b>Live Now</b><i></i></div>
+          <article class="live-card">
+            <div><em></em><span class="mono">Live · 287 Watch</span></div>
+            <h3>kiwi 在直播 React</h3>
+            <p>投票器组件：从 useState 到 reducer</p>
+          </article>
+
+          <div class="pair-card"><span>pair-1 · plum, nori</span><i></i></div>
+
+          <div class="section-label"><span>§03</span><b>Tools</b><i></i></div>
+          <div class="tool-list">
+            <span>IDE Workspace <b>⌘E</b></span>
+            <span>GUI ↔ Term <mark>New</mark></span>
+          </div>
+          <div class="volume-note">Vol. III · Cont'd P.2</div>
+        </aside>
+
+        <main class="channel-main" [class.ide-active]="activeChannelView === 'ide'">
+          <nav class="workspace-tabs" aria-label="Channel workspace">
+            <button
+              type="button"
+              [class.active]="activeChannelView === 'thread'"
+              (click)="setChannelView('thread')"
+            >
+              Thread
+            </button>
+            <button
+              type="button"
+              [class.active]="activeChannelView === 'ide'"
+              (click)="setChannelView('ide')"
+            >
+              IDE Workspace
+            </button>
+            <span>pair-1 · plum, nori · fib.py</span>
+          </nav>
+
+          @if (activeChannelView === 'thread') {
+          <section class="message-flow">
+            @if (isDesktop && workspace) {
+              <div class="journal-head">
+                <div class="section-label"><span>§06</span><b>Activity Journal</b><i></i></div>
+                <h2>{{ workspace.name }}</h2>
+                <p>本机工作记录与不可变 review snapshots。</p>
+                <form (submit)="addJournalNote(); $event.preventDefault()">
+                  <textarea
+                    aria-label="Write journal note"
+                    placeholder="写一条关于这次修改的记录..."
+                    [value]="journalDraft"
+                    (input)="updateJournalDraft($event)"
+                  ></textarea>
+                  <button class="btn primary" type="submit">Add Note</button>
+                </form>
+                <div class="journal-controls">
+                  <nav aria-label="Filter journal kind">
+                    <button type="button" [class.active]="journalKindFilter === 'all'" (click)="setJournalKindFilter('all')">All <b>{{ journalEntryCount('all') }}</b></button>
+                    <button type="button" [class.active]="journalKindFilter === 'note'" (click)="setJournalKindFilter('note')">Notes <b>{{ journalEntryCount('note') }}</b></button>
+                    <button type="button" [class.active]="journalKindFilter === 'run'" (click)="setJournalKindFilter('run')">Runs <b>{{ journalEntryCount('run') }}</b></button>
+                    <button type="button" [class.active]="journalKindFilter === 'git'" (click)="setJournalKindFilter('git')">Git <b>{{ journalEntryCount('git') }}</b></button>
+                    <button type="button" [class.active]="journalKindFilter === 'review'" (click)="setJournalKindFilter('review')">Review <b>{{ journalEntryCount('review') }}</b></button>
+                  </nav>
+                  <input
+                    type="text"
+                    aria-label="Filter activity journal"
+                    placeholder="FILTER JOURNAL..."
+                    [value]="journalQuery"
+                    (input)="updateJournalQuery($event)"
+                  />
+                </div>
+              </div>
+              <div class="journal-list">
+                @for (entry of filteredJournalEntries; track entry.id) {
+                  <article
+                    class="journal-entry"
+                    [class.review]="entry.kind === 'review'"
+                    [class.commit]="journalCommitRevision(entry) !== null"
+                  >
+                    <span>{{ entry.kind }}</span>
+                    <time>{{ entry.createdAt }}</time>
+                    <p>{{ entry.body }}</p>
+                    @if (entry.snapshotId) {
+                      <b>Snapshot · {{ entry.snapshotId }}</b>
+                      @if (entry.metadata?.['runResultId']) {
+                        <b class="journal-evidence">Run evidence attached</b>
+                      }
+                      <button class="btn ghost" type="button" (click)="openSnapshot(entry.snapshotId)">Open Snapshot</button>
+                    }
+                    @if (journalRunResultId(entry)) {
+                      <button class="btn ghost" type="button" (click)="openJournalRunEvidence(entry)">Open Run</button>
+                    }
+                    @if (journalCommitRevision(entry)) {
+                      <button class="btn ghost" type="button" (click)="openJournalCommit(entry)">Open Commit</button>
+                    }
+                  </article>
+                } @empty {
+                  <article class="journal-empty">{{ journalEntries.length ? 'NO JOURNAL ENTRIES MATCH THIS FILTER.' : 'RUN CODE, WRITE A NOTE, OR REQUEST REVIEW TO BEGIN THE JOURNAL.' }}</article>
+                }
+              </div>
+            } @else {
+            <div class="date-rule">
+              <b>Today · May 24</b>
+              <i></i>
+              <span>P. 1 of 1</span>
+            </div>
+            @for (update of threadUpdates; track update.time + update.file) {
+              <article class="shared-run" [class.review]="update.kind === 'review'">
+                <span class="avatar cyan">YU</span>
+                <div>
+                  <div class="message-meta">
+                    <b>you</b>
+                    <time>{{ update.time }} · {{ update.kind === 'review' ? 'REVIEW REQUEST' : 'SHARED RUN' }}</time>
+                  </div>
+                  @if (update.kind === 'review') {
+                    <p>请 <strong>@小酥 @plum</strong> 帮忙看一下 <strong>{{ update.file }}</strong>：</p>
+                    <code>REVIEW · {{ update.result }}</code>
+                  } @else {
+                    <p>刚刚从 IDE 发布了 <strong>{{ update.file }}</strong> 的运行结果：</p>
+                    <code>{{ update.result }}</code>
+                  }
+                </div>
+                <button class="btn ghost" type="button" (click)="openSharedBuffer(update.file)">Open Buffer</button>
+              </article>
+            }
+            <div class="flow-left">
+              <article class="message plum-message">
+                <span class="avatar">PL</span>
+              <div class="message-body">
+                <div class="message-meta"><b>plum</b><time>14:02</time></div>
+                <p class="serif-copy with-drop"><span class="drop-cap">救</span>命 这道题我写到第三层就栈溢出了 <mark>@小酥</mark> 能看看吗?</p>
+                <div class="code-card">
+                  <div class="code-head"><span>Code / Python</span><b>fib.py · 5 行</b></div>
+                  <pre><code><b>01</b>def fib(n):
+<b>02</b>    if n &lt; 2: return n
+<b>03</b>    return fib(n-1) + fib(n-2)
+<b>04</b>
+<b>05</b>print(fib(40))  # ← 这里就卡住了 😭</code></pre>
+                </div>
+                <div class="reactions"><span>😭 × 4</span><span>👀 × 3</span><button type="button">+</button></div>
+                <div class="footnote"><b>⟨1⟩</b> 第三层指 fib(38) 之后 — 默认递归深度差不多就 1000 层。</div>
+              </div>
+              </article>
+
+              <aside class="pull-quote">
+                <p>“1.6 亿次计算 → 加 memo 后 41 次。差距 4000000×。”</p>
+                <span>小酥, AI 助教</span>
+              </aside>
+
+              <article class="message ai-message">
+              <span class="avatar ai">AI<b>AI</b></span>
+              <div class="message-body">
+                <div class="message-meta"><b>小酥</b><time>14:03 · AI 助教</time></div>
+                <p class="serif-copy">看到啦 plum 🍀 你的版本每次都重算重复值, n=40 大概 1.6 亿次计算。加 memo 就能 1000× 提速:</p>
+                <div class="code-card ai-code">
+                  <div class="code-head"><span>AI ✦</span><b>fib_memo.py · 7 L</b></div>
+                  <pre><code><b>01</b>from functools import cache
+<b>02</b>
+<b>03</b>@cache
+<b>04</b>def fib(n):
+<b>05</b>    if n &lt; 2: return n
+<b>06</b>    return fib(n-1) + fib(n-2)
+<b>07</b>print(fib(40))</code></pre>
+                  <div class="code-note">[Note] Original 2.1s → Memo 0.0002s</div>
+                </div>
+              </div>
+              </article>
+            </div>
+
+            <div class="flow-right">
+              <div class="asterism">✦ ✦ ✦</div>
+
+              <article class="message compact jay-message">
+              <span class="avatar">JY</span>
+              <div class="message-body">
+                <div class="message-meta"><b>jay</b><time>14:09</time></div>
+                <p class="serif-copy">我把递归树画出来了, 看了就懂为啥 memo 这么快 👇</p>
+                <figure class="recursion-figure">
+                  <div class="tree-sketch">
+                    <span class="node root">fib(6)</span>
+                    <span class="node n1">fib(5)</span>
+                    <span class="node n2">fib(4)</span>
+                    <span class="node n3">fib(4)</span>
+                    <span class="node n4">memo</span>
+                    <i class="line l1"></i><i class="line l2"></i><i class="line l3"></i><i class="line l4"></i>
+                  </div>
+                  <figcaption><b>Fig. 01</b><span>jay 手绘的递归树, 左 fib(6), 右加 memo 后。</span></figcaption>
+                </figure>
+                <div class="reactions"><span class="mine">🔥 × 7</span><span>🧠 × 2</span><button type="button">+</button></div>
+                <div class="thread-hint">
+                  <span class="avatar small">PL</span>
+                  <b>3 Replies in Thread</b>
+                  <em>plum asked about cache keys</em>
+                </div>
+              </div>
+              </article>
+
+              <article class="message compact nori-message">
+              <span class="avatar">NO</span>
+              <div class="message-body">
+                <div class="message-meta"><b>nori</b><time>14:11</time></div>
+                <p class="serif-copy">楼上画得真好...我也试试 memo</p>
+                <div class="typing-row"><span class="mono">小酥 is typing</span><i></i><i></i><i></i></div>
+              </div>
+              </article>
+            </div>
+            }
+          </section>
+          @if (snapshotPreview) {
+            <article class="snapshot-preview" aria-label="Review snapshot preview">
+              <header>
+                <div>
+                  <span class="mono tiny">Review snapshot</span>
+                  <h3>{{ activeSnapshotFile.path }}</h3>
+                  @if (snapshotPreview.sourceRevision) {
+                    <small>SOURCE · COMMIT {{ snapshotPreview.sourceRevision.slice(0, 7) }}</small>
+                  }
+                  <small>{{ snapshotPreview.files.length }} FILE{{ snapshotPreview.files.length === 1 ? '' : 'S' }} IN REVIEW SET</small>
+                  <p class="snapshot-note">{{ snapshotPreview.note }}</p>
+                  @if (snapshotCompareOpen) {
+                    <small>{{ snapshotDiffSummary }}</small>
+                  }
+                </div>
+                <button type="button" (click)="closeSnapshot()">Close ×</button>
+              </header>
+              <nav class="snapshot-files" aria-label="Snapshot files">
+                @for (file of snapshotPreview.files; track file.path) {
+                  <button type="button" [class.active]="activeSnapshotFile.path === file.path" (click)="selectSnapshotFile(file.path)">
+                    {{ file.path }}
+                  </button>
+                }
+              </nav>
+              @if (snapshotRunResult) {
+                <aside class="snapshot-run-evidence" aria-label="Attached run evidence">
+                  <div class="snapshot-evidence-summary">
+                    <span class="mono tiny">§13 · Run Evidence</span>
+                    <b>{{ snapshotRunResult.profileName }}</b>
+                    <strong [class.failed]="snapshotRunResult.exitCode !== 0">Exit {{ snapshotRunResult.exitCode }}</strong>
+                    <small>{{ snapshotRunResult.entryFile }} · {{ snapshotRunResult.elapsedMs }} MS · {{ snapshotRunResult.diagnostics.length }} DIAGNOSTICS</small>
+                    <div class="snapshot-evidence-actions">
+                      <button type="button" (click)="toggleSnapshotEvidence()">
+                        {{ snapshotEvidenceOpen ? 'Hide Transcript' : 'Transcript' }}
+                      </button>
+                      <button type="button" (click)="replaySnapshotRunInTerminal()">Open In Terminal</button>
+                    </div>
+                  </div>
+                  @if (snapshotEvidenceOpen) {
+                    <div class="snapshot-evidence-detail" [class.transcript-only]="snapshotRunResult.diagnostics.length === 0">
+                      <section class="snapshot-transcript">
+                        <span>Captured Transcript</span>
+                        <pre>{{ snapshotRunTranscript }}</pre>
+                      </section>
+                      @if (snapshotRunResult.diagnostics.length > 0) {
+                        <section class="snapshot-evidence-problems" aria-label="Snapshot run diagnostics">
+                          <span>Problems · {{ snapshotRunResult.diagnostics.length }}</span>
+                          @for (diagnostic of snapshotRunResult.diagnostics; track diagnostic.path + diagnostic.line + diagnostic.message) {
+                            <button
+                              type="button"
+                              [disabled]="!canRevealSnapshotDiagnostic(diagnostic)"
+                              (click)="openSnapshotDiagnostic(diagnostic)"
+                            >
+                              <b>{{ diagnostic.severity }}</b>
+                              <em>{{ diagnostic.path }}:{{ diagnostic.line }}{{ diagnostic.column ? ':' + diagnostic.column : '' }}</em>
+                              <small>{{ snapshotDiagnosticAction(diagnostic) }}</small>
+                            </button>
+                          }
+                        </section>
+                      }
+                    </div>
+                  }
+                </aside>
+              } @else if (snapshotPreview.runResultId) {
+                <aside class="snapshot-run-evidence unavailable" aria-label="Unavailable run evidence">
+                  <span class="mono tiny">§13 · Run Evidence</span>
+                  <b>Evidence unavailable</b>
+                </aside>
+              }
+              <div class="snapshot-editors" [class.comparing]="snapshotCompareOpen">
+                <section>
+                  <span class="mono tiny">Snapshot</span>
+                  <codeyo-editor
+                    [ariaLabel]="'Snapshot ' + activeSnapshotFile.path"
+                    [content]="activeSnapshotFile.content"
+                    [language]="snapshotLanguage"
+                    [readOnly]="true"
+                    [diagnostics]="activeSnapshotDiagnostics"
+                    [diffLines]="snapshotCompareOpen ? snapshotComparison.leftLines : []"
+                    diffKind="removed"
+                    [revealLine]="snapshotDiagnosticRevealLine"
+                    [revealColumn]="snapshotDiagnosticRevealColumn"
+                    [revealRequest]="snapshotDiagnosticRevealRequest"
+                  />
+                </section>
+                @if (snapshotCompareOpen) {
+                  <section>
+                    <span class="mono tiny">Current Buffer</span>
+                    <codeyo-editor
+                      [ariaLabel]="'Current ' + activeSnapshotFile.path"
+                      [content]="snapshotCurrentContent"
+                      [language]="snapshotLanguage"
+                      [readOnly]="true"
+                      [diffLines]="snapshotComparison.rightLines"
+                      diffKind="added"
+                    />
+                  </section>
+                }
+              </div>
+              @if (snapshotCompareOpen) {
+                <aside class="snapshot-hunk-desk" aria-label="Snapshot change hunks">
+                  <div>
+                    <span class="mono tiny">§14 · Patch Desk</span>
+                    <b>{{ snapshotComparison.hunks.length }} HUNKS</b>
+                  </div>
+                  @if (snapshotCurrentMissing) {
+                    <p>Current file is missing. Restore the full snapshot or fork a new file.</p>
+                  } @else if (snapshotComparison.hunks.length === 0) {
+                    <p>Current buffer matches this snapshot.</p>
+                  } @else {
+                    <nav aria-label="Restore individual snapshot changes">
+                      @for (hunk of snapshotComparison.hunks; track hunk.id) {
+                        <article>
+                          <strong>Hunk {{ hunk.id }}</strong>
+                          <small>{{ snapshotHunkSummary(hunk) }}</small>
+                          <em>+{{ hunk.currentLines.length }} / -{{ hunk.snapshotLines.length }}</em>
+                          <button type="button" (click)="restoreSnapshotHunk(hunk.id)">Restore Hunk</button>
+                        </article>
+                      }
+                    </nav>
+                  }
+                </aside>
+              }
+              <footer>
+                <button class="btn ghost" type="button" (click)="toggleSnapshotCompare()">
+                  {{ snapshotCompareOpen ? 'Snapshot Only' : 'Compare Current' }}
+                </button>
+                <button class="btn primary" type="button" (click)="restoreSnapshotToBuffer()">Restore To Buffer</button>
+                <button class="btn accent" type="button" (click)="forkSnapshot()">Fork As New File</button>
+              </footer>
+            </article>
+          }
+          } @else {
+            <section class="ide-plane" aria-label="IDE workspace panel">
+              @if (quickOpenVisible) {
+                <div class="quick-open-backdrop" (click)="closeQuickOpen()"></div>
+                <section class="quick-open-palette" aria-label="Quick open files" (click)="$event.stopPropagation()">
+                  <header>
+                    <span class="mono tiny">§07 · Quick Open</span>
+                    <button type="button" (click)="closeQuickOpen()">×</button>
+                  </header>
+                  <label class="quick-open-input">
+                    <span>⌘P</span>
+                    <input
+                      #quickOpenInput
+                      type="text"
+                      aria-label="Quick open file"
+                      autofocus
+                      placeholder="SEARCH FILES"
+                      [value]="quickOpenQuery"
+                      (input)="updateQuickOpenQuery($event)"
+                      (keydown.arrowDown)="moveQuickOpen(1); $event.preventDefault(); $event.stopPropagation()"
+                      (keydown.arrowUp)="moveQuickOpen(-1); $event.preventDefault(); $event.stopPropagation()"
+                      (keydown.enter)="selectQuickOpen(); $event.preventDefault(); $event.stopPropagation()"
+                      (keydown.escape)="closeQuickOpen(); $event.preventDefault(); $event.stopPropagation()"
+                    />
+                  </label>
+                  <nav class="quick-open-results" aria-label="Quick open results">
+                    @for (file of quickOpenResults; track file.path; let index = $index) {
+                      <button
+                        type="button"
+                        [class.active]="index === quickOpenIndex"
+                        (mouseenter)="quickOpenIndex = index"
+                        (click)="selectQuickOpen(file)"
+                      >
+                        <span>{{ file.path }}</span>
+                        <small>{{ quickOpenHint(file) }}</small>
+                      </button>
+                    } @empty {
+                      <p>No matching buffer</p>
+                    }
+                  </nav>
+                </section>
+              }
+              <div class="ide-plane-grid">
+                <main class="ide-editor">
+                  <div class="ide-tabs">
+                    @for (file of ideFiles; track file.path) {
+                      <button
+                        type="button"
+                        [class.active]="activeIdeFile.path === file.path"
+                        (click)="selectIdeFile(file.path)"
+                      >
+                        {{ file.name }}
+                      </button>
+                    }
+                    <span class="ide-save-state">{{ editedFileCount }} unsaved</span>
+                    <button
+                      class="panel-toggle"
+                      type="button"
+                      [class.active]="assistantPanelOpen"
+                      (click)="toggleAssistantPanel()"
+                    >
+                      {{ assistantPanelOpen ? 'Hide AI' : 'Show AI' }}
+                    </button>
+                    <button class="btn ghost" type="button" (click)="saveCurrentFile()">Save ⌘S</button>
+                    @if (canSaveAll) {
+                      <button class="btn ghost save-all" type="button" (click)="saveAllFiles()">Save All ⇧⌘S</button>
+                    }
+                    <button class="btn accent" type="button" [disabled]="runBusy" (click)="runCode()">
+                      {{ runBusy ? 'Running...' : 'Run ▶' }}
+                    </button>
+                  </div>
+                  @if (gitComparison) {
+                    <article class="git-compare-workbench" aria-label="Git comparison">
+                      <header>
+                        <div>
+                          <span class="mono tiny">§10 · {{ isGitHistoryComparison ? 'Commit History' : 'Git Compare' }}</span>
+                          <h3>{{ gitComparison.originalPath ? gitComparison.originalPath + ' → ' : '' }}{{ gitComparison.path }}</h3>
+                          <small>{{ gitComparisonSummary }}</small>
+                        </div>
+                        <button type="button" (click)="closeGitComparison()">Close ×</button>
+                      </header>
+                      @if (isGitHistoryComparison && gitHistoryDetail) {
+                        <nav class="git-compare-modes history" aria-label="Commit files">
+                          <p>{{ gitHistoryDetail.shortRevision }} · {{ gitHistoryDetail.subject }}</p>
+                          @for (file of gitHistoryDetail.files; track file.path) {
+                            <button
+                              type="button"
+                              [class.active]="gitComparison.path === file.path"
+                              (click)="selectGitHistoryFile(file)"
+                            >
+                              {{ file.status }} · {{ file.originalPath ? file.originalPath + ' → ' : '' }}{{ file.path }}
+                            </button>
+                          }
+                        </nav>
+                      } @else {
+                        <nav class="git-compare-modes" aria-label="Comparison mode">
+                          <button type="button" [class.active]="gitComparison.mode === 'all'" (click)="setGitComparisonMode('all')">All Changes</button>
+                          <button
+                            type="button"
+                            [class.active]="gitComparison.mode === 'staged'"
+                            [disabled]="!canViewStagedComparison"
+                            (click)="setGitComparisonMode('staged')"
+                          >
+                            Staged
+                          </button>
+                          <button
+                            type="button"
+                            [class.active]="gitComparison.mode === 'unstaged'"
+                            [disabled]="!canViewUnstagedComparison"
+                            (click)="setGitComparisonMode('unstaged')"
+                          >
+                            Unstaged
+                          </button>
+                          @if (gitComparisonHasUnsavedBuffer) {
+                            <p>UNSAVED BUFFER OMITTED · SAVE TO COMPARE IT</p>
+                          }
+                        </nav>
+                      }
+                      <div class="git-compare-editors">
+                        <section>
+                          <span class="mono tiny">{{ gitComparison.leftLabel }}</span>
+                          <codeyo-editor
+                            [ariaLabel]="gitComparison.leftLabel + ' ' + gitComparison.path"
+                            [content]="gitComparison.leftContent"
+                            [language]="gitComparison.language"
+                            [readOnly]="true"
+                            [diffLines]="gitComparisonLeftLines"
+                            diffKind="removed"
+                          />
+                        </section>
+                        <section>
+                          <span class="mono tiny">{{ gitComparison.rightLabel }}</span>
+                          <codeyo-editor
+                            [ariaLabel]="gitComparison.rightLabel + ' ' + gitComparison.path"
+                            [content]="gitComparison.rightContent"
+                            [language]="gitComparison.language"
+                            [readOnly]="true"
+                            [diffLines]="gitComparisonRightLines"
+                            diffKind="added"
+                          />
+                        </section>
+                      </div>
+                      @if (gitHunkActionsEnabled) {
+                        <aside class="git-hunk-desk" aria-label="Git change hunks">
+                          <div>
+                            <span class="mono tiny">§11 · Hunk Desk</span>
+                            <b>{{ gitHunks.length }} HUNKS</b>
+                          </div>
+                          @if (gitHunks.length === 0) {
+                            <p>No changes between the compared versions.</p>
+                          } @else {
+                            <nav aria-label="Apply individual git hunks">
+                              @for (hunk of gitHunks; track hunk.id) {
+                                <article>
+                                  <strong>Hunk {{ hunk.id }}</strong>
+                                  <small>{{ gitHunkSummary(hunk) }}</small>
+                                  <em>+{{ hunk.currentLines.length }} / -{{ hunk.snapshotLines.length }}</em>
+                                  <div class="git-hunk-actions">
+                                    @for (mode of gitHunkAvailableModes; track mode) {
+                                      @if (mode === 'discard' && pendingDiscardHunkId === hunk.id) {
+                                        <button type="button" class="btn danger" [disabled]="gitBusy" (click)="applyGitHunk(hunk.id, 'discard')">Confirm Discard</button>
+                                        <button type="button" class="btn ghost" [disabled]="gitBusy" (click)="cancelPendingHunkDiscard()">Cancel</button>
+                                      } @else {
+                                        <button
+                                          type="button"
+                                          class="btn"
+                                          [class.ghost]="mode !== 'stage' && mode !== 'unstage'"
+                                          [class.accent]="mode === 'stage'"
+                                          [class.danger]="mode === 'discard'"
+                                          [disabled]="gitBusy"
+                                          (click)="applyGitHunk(hunk.id, mode)"
+                                        >
+                                          {{ hunkActionLabel(mode) }}
+                                        </button>
+                                      }
+                                    }
+                                  </div>
+                                </article>
+                              }
+                            </nav>
+                          }
+                        </aside>
+                      }
+                      @if (isGitHistoryComparison && reviewableCommitFileCount && gitHistoryDetail) {
+                        <aside class="git-snapshot-draft">
+                          <div>
+                            <span class="mono tiny">§12 · Review Note</span>
+                            <p>CAPTURE FROM COMMIT {{ gitHistoryDetail.shortRevision }} · LEAVE BLANK TO USE ITS SUBJECT</p>
+                          </div>
+                          <div class="git-snapshot-fields">
+                            <textarea
+                              aria-label="Review snapshot note"
+                              placeholder="WHY DOES THIS REVISION MATTER?"
+                              [value]="reviewSnapshotDraft"
+                              (input)="updateReviewSnapshotDraft($event)"
+                            ></textarea>
+                            <label>
+                              <span>Attach Run Evidence</span>
+                              <select
+                                aria-label="Attach run evidence"
+                                [value]="selectedReviewRunResultId"
+                                (change)="updateSelectedReviewRun($event)"
+                              >
+                                <option value="">NO RUN EVIDENCE</option>
+                                @for (result of recentRunResults; track result.id) {
+                                  <option [value]="result.id">{{ runEvidenceLabel(result) }}</option>
+                                }
+                              </select>
+                            </label>
+                          </div>
+                        </aside>
+                      }
+                      <footer>
+                        <button class="btn ghost" type="button" [disabled]="!canOpenGitComparisonBuffer" (click)="openGitComparisonBuffer()">
+                          {{ isGitHistoryComparison ? 'Open Current Buffer' : 'Open Buffer' }}
+                        </button>
+                        @if (isGitHistoryComparison && gitComparison.rightExists && reviewableCommitFileCount > 1) {
+                          <button class="btn ghost" type="button" [disabled]="gitSnapshotBusy" (click)="captureGitHistorySnapshot()">Save This File</button>
+                        }
+                        @if (isGitHistoryComparison && reviewableCommitFileCount > 1) {
+                          <button class="btn accent" type="button" [disabled]="gitSnapshotBusy" (click)="captureGitHistorySnapshot('commit')">
+                            {{ gitSnapshotBusy ? 'Saving...' : 'Save Commit Set · ' + reviewableCommitFileCount }}
+                          </button>
+                        } @else if (isGitHistoryComparison && gitComparison.rightExists) {
+                          <button class="btn accent" type="button" [disabled]="gitSnapshotBusy" (click)="captureGitHistorySnapshot()">Save Review Snapshot</button>
+                        }
+                        @if (!isGitHistoryComparison && canViewStagedComparison) {
+                          <button class="btn ghost" type="button" [disabled]="gitBusy" (click)="gitAction({ type: 'unstage', path: gitComparison.path, originalPath: gitComparison.originalPath })">Unstage</button>
+                        }
+                        @if (!isGitHistoryComparison && canViewUnstagedComparison) {
+                          <button class="btn accent" type="button" [disabled]="gitBusy" (click)="gitAction({ type: 'stage', path: gitComparison.path, originalPath: gitComparison.originalPath })">Stage Changes</button>
+                        }
+                      </footer>
+                    </article>
+                  } @else {
+                    @if (fileConflict) {
+                      <aside class="file-conflict">
+                        <span>{{ fileConflict.deleted ? 'Deleted on disk' : 'External change detected' }}</span>
+                        <p>{{ activeIdeFile.path }} {{ fileConflict.deleted ? 'was deleted while this buffer was edited.' : 'changed on disk while this buffer was edited.' }}</p>
+                        @if (!fileConflict.deleted) {
+                          <button class="btn ghost" type="button" (click)="openConflictCompare()">Compare</button>
+                        }
+                        <button class="btn ghost" type="button" (click)="resolveConflict(true)">
+                          {{ fileConflict.deleted ? 'Discard Buffer' : 'Load Disk Version' }}
+                        </button>
+                        <button class="btn accent" type="button" (click)="resolveConflict(false)">Keep Mine</button>
+                      </aside>
+                    }
+
+                    @if (fileConflict && conflictCompareOpen) {
+                      <article class="conflict-compare-workbench" aria-label="External change comparison">
+                        <header>
+                          <div>
+                            <span class="mono tiny">§12 · Save Conflict</span>
+                            <h3>{{ activeIdeFile.path }}</h3>
+                            <small>{{ conflictDiffSummary }}</small>
+                          </div>
+                          <button type="button" (click)="closeConflictCompare()">Edit Buffer</button>
+                        </header>
+                        <div class="conflict-compare-editors">
+                          <section>
+                            <span class="mono tiny">Disk Version</span>
+                            <codeyo-editor
+                              [ariaLabel]="'Disk version ' + activeIdeFile.name"
+                              [content]="fileConflict.diskContent"
+                              [language]="activeIdeFile.lang"
+                              [readOnly]="true"
+                              [diffLines]="conflictComparison.leftLines"
+                              diffKind="removed"
+                            />
+                          </section>
+                          <section>
+                            <span class="mono tiny">Unsaved Buffer</span>
+                            <codeyo-editor
+                              [ariaLabel]="'Unsaved buffer ' + activeIdeFile.name"
+                              [content]="activeEditorText"
+                              [language]="activeIdeFile.lang"
+                              [readOnly]="true"
+                              [diffLines]="conflictComparison.rightLines"
+                              diffKind="added"
+                            />
+                          </section>
+                        </div>
+                        <footer>
+                          <button class="btn ghost" type="button" (click)="resolveConflict(true)">Load Disk Version</button>
+                          <button class="btn accent" type="button" (click)="resolveConflict(false)">Keep Mine</button>
+                        </footer>
+                      </article>
+                    } @else {
+                    <div class="editor-sheet">
+                      <div class="editor-ruler">
+                        <span>{{ activeIdeFile.lang }}</span>
+                        <b>{{ activeIdeFile.lines.length }} Lines</b>
+                      </div>
+                      <div class="editor-body">
+                        <codeyo-editor
+                          [ariaLabel]="'Edit ' + activeIdeFile.name"
+                          [content]="activeEditorText"
+                          [language]="activeIdeFile.lang"
+                          [readOnly]="isDesktop && !!workspace && !workspace.trusted"
+                          [diagnostics]="activeDiagnostics"
+                          [revealLine]="diagnosticRevealLine"
+                          [revealColumn]="diagnosticRevealColumn"
+                          [revealRequest]="diagnosticRevealRequest"
+                          (contentChange)="updateActiveFile($event)"
+                        />
+                      </div>
+                    </div>
+                    }
+                  }
+                </main>
+
+                @if (assistantPanelOpen) {
+                <aside class="ide-inspector">
+                  <button class="assistant-close" type="button" (click)="toggleAssistantPanel()">Close ×</button>
+                  <article class="ai-note-card">
+                    <div class="section-label tight"><span>§07</span><b>小酥 Notes</b><i></i></div>
+                    <p>“{{ assistantMessage }}”</p>
+                    <button class="btn primary" type="button" (click)="performAssistantAction()">{{ assistantActionLabel }}</button>
+                    <small>{{ assistantNotice }}</small>
+                  </article>
+
+                  <article class="ide-metric-card">
+                    <span>{{ activeIdeFile.name === 'tests.py' ? 'Coverage' : 'Complexity' }}</span>
+                    <strong>{{ activeComplexity }}</strong>
+                    @if (activeIdeFile.name === 'fib.py') {
+                      <p>{{ hasMemoizedFib ? '从指数递归降到线性缓存。' : '当前 fib.py 仍会重复展开递归树。' }}</p>
+                    } @else {
+                      <p>{{ activeIdeFile.name === 'tests.py' ? '检查功能与大输入路径。' : '当前 buffer 的结构摘要。' }}</p>
+                    }
+                  </article>
+
+                  <article class="ide-metric-card amber">
+                    <span>{{ activeIdeFile.name === 'notes.md' ? 'Mode' : 'Speed' }}</span>
+                    <strong>{{ activeSpeed }}</strong>
+                    @if (activeIdeFile.name === 'fib.py') {
+                      <p>{{ hasMemoizedFib ? '原版 2.1s → memo 后几乎瞬间。' : '运行后会提示重复递归。' }}</p>
+                    } @else {
+                      <p>{{ activeIdeFile.name === 'tests.py' ? '测试执行时长。' : '可预览并分享给同伴。' }}</p>
+                    }
+                  </article>
+                </aside>
+                }
+              </div>
+
+              <footer class="ide-terminal" [class.desktop-console]="isDesktop">
+                <header class="console-toolbar">
+                  <div class="console-tabs">
+                    <button
+                      type="button"
+                      [class.active]="activeConsolePanel === 'terminal'"
+                      (click)="setConsolePanel('terminal')"
+                    >
+                      §08 Terminal
+                    </button>
+                    <button
+                      type="button"
+                      [class.active]="activeConsolePanel === 'problems'"
+                      (click)="setConsolePanel('problems')"
+                    >
+                      Problems
+                    </button>
+                    <button
+                      type="button"
+                      [class.active]="activeConsolePanel === 'output'"
+                      (click)="setConsolePanel('output')"
+                    >
+                      Output
+                    </button>
+                  </div>
+                  <div class="console-actions">
+                    <button type="button" (click)="runTests()">Run Tests</button>
+                    <button type="button" (click)="clearTerminal()">Clear</button>
+                    <button type="button" [disabled]="runShared" (click)="shareRunToThread()">
+                      {{ runShared ? 'Shared' : 'Share to Thread' }}
+                    </button>
+                  </div>
+                </header>
+                @if (isDesktop) {
+                  <codeyo-terminal
+                    [class.is-hidden-console]="activeConsolePanel !== 'terminal'"
+                    [workspace]="workspace"
+                    [enabled]="!!workspace?.trusted"
+                    [taskTitle]="lastRunTarget"
+                    [taskTranscript]="runTaskTranscript"
+                    [taskSequence]="runTaskSequence"
+                    [visible]="activeConsolePanel === 'terminal'"
+                  />
+                  @if (activeConsolePanel !== 'terminal') {
+                    <div class="console-surface">
+                      @if (activeConsolePanel === 'problems') {
+                        @if (runDiagnostics.length > 0) {
+                          @for (diagnostic of runDiagnostics; track diagnostic.path + diagnostic.line + diagnostic.message) {
+                            <button class="problem-item" type="button" (click)="openDiagnostic(diagnostic)">
+                              <b>{{ diagnostic.severity }}</b>
+                              <span>{{ diagnostic.path }}:{{ diagnostic.line }}{{ diagnostic.column ? ':' + diagnostic.column : '' }}</span>
+                              <em>{{ diagnostic.message }}</em>
+                              <i>Open</i>
+                            </button>
+                          }
+                        } @else {
+                          @for (line of problemLines; track line) {
+                            <p class="problem-line">{{ line }}</p>
+                          }
+                        }
+                      } @else {
+                        @for (line of outputLines; track line) {
+                          <p>{{ line }}</p>
+                        }
+                      }
+                    </div>
+                  }
+                } @else {
+                  <div class="console-surface">
+                    @if (activeConsolePanel === 'terminal') {
+                      @for (line of runOutput; track $index) {
+                        <p>{{ line }}</p>
+                      }
+                    } @else if (activeConsolePanel === 'problems') {
+                      @for (line of problemLines; track line) {
+                        <p class="problem-line">{{ line }}</p>
+                      }
+                    } @else {
+                      @for (line of outputLines; track line) {
+                        <p>{{ line }}</p>
+                      }
+                    }
+                  </div>
+                }
+                @if (!isDesktop) {
+                  <form class="terminal-command" (submit)="executeTerminalCommand(); $event.preventDefault()">
+                    <span>$</span>
+                    <input
+                      type="text"
+                      aria-label="Terminal command"
+                      placeholder="TYPE HELP OR PYTHON FIB.PY"
+                      [value]="terminalCommand"
+                      (input)="updateTerminalCommand($event)"
+                    />
+                    <button type="submit">Run ↵</button>
+                  </form>
+                }
+              </footer>
+            </section>
+          }
+        </main>
+
+        <aside class="right-rail">
+          <nav class="right-tabs" [class.desktop-tabs]="isDesktop" aria-label="Right workspace">
+            <button
+              type="button"
+              [class.active]="activeRightPanel === 'contributors'"
+              (click)="setRightPanel('contributors')"
+            >
+              Contributors
+            </button>
+            <button
+              type="button"
+              [class.active]="activeRightPanel === 'files'"
+              (click)="setRightPanel('files')"
+            >
+              Files
+            </button>
+            @if (isDesktop) {
+              <button
+                type="button"
+                [class.active]="activeRightPanel === 'git'"
+                (click)="setRightPanel('git'); refreshGit()"
+              >
+                Git
+              </button>
+              <button
+                type="button"
+                [class.active]="activeRightPanel === 'settings'"
+                (click)="setRightPanel('settings')"
+              >
+                Settings
+              </button>
+            }
+          </nav>
+
+          @if (activeRightPanel === 'contributors') {
+            <article class="today-card">
+              <div class="section-label tight"><span>§00</span><b>Today's Edition</b><i></i></div>
+              <p>“一道递归题, 把整个频道带进了‘什么是记忆化’。”</p>
+              <small>Curated by 小酥 · 14:11</small>
+            </article>
+
+            <div class="section-label"><span>§04</span><b>Contributors</b><i></i></div>
+            <div class="people-list">
+              <article class="person-row">
+                <span class="avatar blue">K</span>
+                <div><b>kiwi</b><span>Live · React 直播中</span></div>
+                <mark>Live</mark>
+              </article>
+              <article class="person-row hovered">
+                <span class="avatar ai">AI<b>AI</b></span>
+                <div><b>小酥</b><span>AI tutor · memo</span></div>
+                <aside class="profile-popover">
+                  <div class="popover-top">
+                    <span class="avatar ai large">AI<b>AI</b></span>
+                    <div><b>小酥</b><span>AI 助教 · online</span></div>
+                  </div>
+                  <p>擅长把抽象算法讲成小图和短注释。正在关注 plum 的栈溢出问题。</p>
+                  <div class="popover-actions"><button type="button">DM</button><button type="button">Settings</button></div>
+                </aside>
+              </article>
+              <article class="person-row">
+                <span class="avatar">PL</span>
+                <div><b>plum</b><span>写作业</span></div>
+              </article>
+              <article class="person-row">
+                <span class="avatar coral">J</span>
+                <div><b>jay</b><span>画递归树</span></div>
+              </article>
+              <article class="person-row">
+                <span class="avatar cyan">N</span>
+                <div><b>nori</b><span>写作业</span></div>
+              </article>
+              <article class="person-row">
+                <span class="avatar green">S</span>
+                <div><b>sora</b><span>闲逛</span></div>
+              </article>
+            </div>
+
+            <div class="section-label"><span>§05</span><b>Away</b><i></i></div>
+            <div class="people-list quiet">
+              <article class="person-row"><span class="avatar muted">MZ</span><div><b>mizu</b><span>away · lunch</span></div></article>
+              <article class="person-row"><span class="avatar muted">KI</span><div><b>ki</b><span>away · docs</span></div></article>
+            </div>
+          } @else if (activeRightPanel === 'files') {
+            <section class="side-file-system">
+              @if (isDesktop) {
+                <article class="workspace-connect" [class.trusted]="workspace?.trusted">
+                  <span class="mono tiny">Local workspace</span>
+                  <p>{{ workspaceNotice }}</p>
+                  <button class="btn accent" type="button" (click)="openDesktopWorkspace()">Open Folder</button>
+                  @if (!workspace && recentWorkspace) {
+                    <button class="btn primary" type="button" (click)="resumeRecentWorkspace()">
+                      Resume {{ recentWorkspace.name }}
+                    </button>
+                  }
+                  @if (workspace && !workspace.trusted) {
+                    <button class="btn primary" type="button" (click)="trustDesktopWorkspace()">Trust & Enable</button>
+                  }
+                  @if (workspace?.trusted) {
+                    <div class="storage-switch">
+                      <button type="button" [class.active]="workspace?.storageMode === 'app-db'" (click)="migrateStorage('app-db')">App DB</button>
+                      <button type="button" [class.active]="workspace?.storageMode === 'workspace-codeyo'" (click)="migrateStorage('workspace-codeyo')">.codeyo/</button>
+                    </div>
+                  }
+                </article>
+                @if (workspace?.trusted && recoveryBufferCount > 0) {
+                  <article class="recovery-center">
+                    <div class="section-label tight"><span>§05</span><b>Recovery</b><i></i></div>
+                    <p>{{ recoveryBufferCount }} unsaved recovery {{ recoveryBufferCount === 1 ? 'copy' : 'copies' }} available.</p>
+                    <div class="recovery-list">
+                      @for (buffer of recoveryBuffers; track buffer.filePath) {
+                        <article>
+                          <div>
+                            <b>{{ buffer.filePath }}</b>
+                            <small>{{ recoveryAgeLabel(buffer) }}</small>
+                          </div>
+                          <button type="button" (click)="restoreRecovery(buffer)">Restore</button>
+                          <button class="danger-action" type="button" (click)="discardRecovery(buffer)">Discard</button>
+                        </article>
+                      }
+                    </div>
+                  </article>
+                }
+              }
+              <div class="explorer-heading">
+                <div class="section-label tight"><span>§04</span><b>Explorer</b><i></i></div>
+                <button type="button" (click)="startNewFile()">+ File</button>
+              </div>
+
+              <label class="explorer-filter">
+                <span>/</span>
+                <input
+                  type="text"
+                  aria-label="Filter buffers"
+                  placeholder="FILTER BUFFERS"
+                  [value]="fileQuery"
+                  (input)="updateFileQuery($event)"
+                />
+                @if (fileQuery) {
+                  <button type="button" (click)="clearFileQuery()">Clear</button>
+                }
+              </label>
+
+              <div class="vscode-tree">
+                <button class="tree-node folder open" type="button" (click)="toggleWorkspace()">
+                  <span>{{ workspaceExpanded ? '▾' : '▸' }} {{ workspace?.name || 'codeyo-workshop' }}</span>
+                  <b>{{ ideFiles.length }}</b>
+                </button>
+                @if (workspaceExpanded) {
+                  @for (entry of explorerTreeEntries; track entry.id) {
+                    @if (entry.kind === 'folder') {
+                      <button
+                        class="tree-node folder child"
+                        type="button"
+                        [class.open]="entry.expanded"
+                        [style.padding-left.px]="treeNodePadding(entry.depth)"
+                        (click)="toggleExplorerFolder(entry.path)"
+                      >
+                        <span>{{ entry.expanded ? '▾' : '▸' }} {{ entry.name }}</span>
+                      </button>
+                    } @else if (entry.file) {
+                      <button
+                        class="tree-node file child depth-2"
+                        type="button"
+                        [class.active]="activeIdeFile.path === entry.file.path"
+                        [style.padding-left.px]="treeNodePadding(entry.depth)"
+                        [title]="entry.file.path"
+                        (click)="selectIdeFile(entry.file.path)"
+                      >
+                        <span>{{ entry.name }}</span>
+                        <small>{{ entry.file.status }}</small>
+                        <i>
+                          @if (entry.file.name === 'fib.py') {
+                            <em class="avatar small">PL</em><em class="avatar small cyan">NO</em>
+                          } @else if (entry.file.name === 'notes.md') {
+                            <em class="avatar small ai">AI<b>AI</b></em>
+                          } @else if (entry.file.name === 'tests.py') {
+                            <em class="avatar small coral">J</em>
+                          } @else {
+                            <em class="avatar small green">YU</em>
+                          }
+                        </i>
+                      </button>
+                    }
+                  }
+
+                  @if (explorerTreeEntries.length === 0 && !creatingFile) {
+                    <div class="tree-empty">
+                      <span>No buffer found</span>
+                      <button type="button" (click)="clearFileQuery()">Clear filter</button>
+                    </div>
+                  }
+
+                  @if (creatingFile) {
+                    <form class="new-file-row" (submit)="createFile(); $event.preventDefault()">
+                      <span>+</span>
+                      <input
+                        type="text"
+                        aria-label="New file name"
+                        placeholder="src/solution.py"
+                        [value]="newFileName"
+                        (input)="updateNewFileName($event)"
+                      />
+                      <button type="submit">↵</button>
+                      <button type="button" (click)="cancelNewFile()">×</button>
+                    </form>
+                  }
+                }
+              </div>
+
+              <article class="file-bubble-card">
+                <div class="bubble-row">
+                  <span class="avatar">PL</span>
+                  <span class="avatar cyan">NO</span>
+                </div>
+                <p>{{ isDesktop ? '正在编辑' : '正在同看' }} <b>{{ activeIdeFile.name }}</b>。Run 输出会同步到 terminal。</p>
+              </article>
+
+              <article class="file-bubble-card amber">
+                <span class="mono tiny">Active buffer</span>
+                <h3>{{ activeIdeFile.name }}</h3>
+                <p>{{ activeSaveLabel }}</p>
+                <div class="buffer-actions">
+                  <button type="button" (click)="requestPeerReview()">
+                    {{ isDesktop && activeBufferRunEvidence ? 'Review + Run Evidence' : 'Request Review' }}
+                  </button>
+                  <button type="button" (click)="duplicateActiveFile()">Duplicate</button>
+                  @if (isDesktop && workspace?.trusted) {
+                    <button type="button" (click)="renameActiveFile()">Rename</button>
+                  }
+                  @if (canDeleteActiveFile) {
+                    <button class="danger-action" type="button" (click)="deleteActiveFile()">Delete</button>
+                  }
+                  @if (!assistantPanelOpen) {
+                    <button type="button" (click)="showAssistantPanel()">Show AI</button>
+                  }
+                </div>
+              </article>
+              @if (isDesktop && workspace?.trusted && (activeIdeFile.lang === 'python' || activeIdeFile.lang === 'cpp')) {
+                <article class="run-profile-card">
+                  <div class="section-label tight"><span>§08</span><b>Run Profile</b><i></i></div>
+                  <label>
+                    <span>Command</span>
+                    <input
+                      type="text"
+                      aria-label="Run profile command"
+                      [value]="activeIdeFile.lang === 'cpp' ? cppExecutable : pythonExecutable"
+                      (input)="updateProfileCommand($event)"
+                    />
+                  </label>
+                  <label>
+                    <span>{{ activeIdeFile.lang === 'cpp' ? 'Compiler Flags' : 'Arguments' }}</span>
+                    <input
+                      type="text"
+                      aria-label="Run profile arguments"
+                      placeholder="OPTIONAL FLAGS"
+                      [value]="profileArgs"
+                      (input)="updateProfileArgs($event)"
+                    />
+                  </label>
+                  @if (activeIdeFile.lang === 'cpp') {
+                    <label>
+                      <span>Program Arguments</span>
+                      <input
+                        type="text"
+                        aria-label="C++ program arguments"
+                        placeholder="OPTIONAL ARGS"
+                        [value]="cppProgramArgs"
+                        (input)="updateCppProgramArgs($event)"
+                      />
+                    </label>
+                  }
+                  @if (activeIdeFile.lang === 'cpp' && cppSourceCandidates.length > 0) {
+                    <div class="run-sources">
+                      <span>Source Files</span>
+                      @for (file of cppSourceCandidates; track file.path) {
+                        <label>
+                          <input
+                            type="checkbox"
+                            [checked]="isCppSourceSelected(file.path)"
+                            [disabled]="file.path === activeIdeFile.path"
+                            (change)="toggleCppSource(file.path, $event)"
+                          />
+                          <b>{{ file.path }}</b>
+                        </label>
+                      }
+                    </div>
+                  }
+                  <div class="environment-card">
+                    <div>
+                      <span>Environment</span>
+                      <b>{{ environmentSummary }}</b>
+                    </div>
+                    <button class="btn ghost" type="button" [disabled]="environmentBusy" (click)="checkEnvironment()">
+                      {{ environmentBusy ? 'Checking...' : 'Check Tools' }}
+                    </button>
+                    @if (environmentChecks.length > 0) {
+                      <div class="environment-list">
+                        @for (check of environmentChecks; track check.id) {
+                          <article [class.missing]="!check.available">
+                            <strong>{{ check.label }}</strong>
+                            <em>{{ toolCheckStatus(check) }}</em>
+                            <small>{{ check.version || check.message }}</small>
+                          </article>
+                        }
+                      </div>
+                    }
+                  </div>
+                  <button class="btn accent" type="button" [disabled]="runBusy" (click)="runCode()">
+                    {{ runBusy ? 'Running...' : 'Run Profile ▶' }}
+                  </button>
+                  <button class="btn ghost" type="button" (click)="saveRunProfile()">Save Profile</button>
+                </article>
+              }
+            </section>
+          } @else if (activeRightPanel === 'settings') {
+            <section class="settings-panel">
+              <div class="section-label tight"><span>§12</span><b>Project Settings</b><i></i></div>
+              <article class="settings-card">
+                <span class="mono tiny">Workspace</span>
+                <h3>{{ workspace?.name || 'No workspace' }}</h3>
+                <p>{{ workspace?.rootPath || 'Open a local folder to configure Codeyo.' }}</p>
+                <div class="settings-actions">
+                  <button class="btn accent" type="button" (click)="openDesktopWorkspace()">Open Folder</button>
+                  @if (workspace && !workspace.trusted) {
+                    <button class="btn primary" type="button" (click)="trustDesktopWorkspace()">Trust & Enable</button>
+                  }
+                </div>
+              </article>
+
+              @if (workspace?.trusted) {
+                <article class="settings-card">
+                  <span class="mono tiny">Storage</span>
+                  <p>Journal, snapshots, run history, and recovery data are stored in the app database unless portable `.codeyo/` is enabled.</p>
+                  <div class="storage-switch settings-storage">
+                    <button type="button" [class.active]="workspace?.storageMode === 'app-db'" (click)="migrateStorage('app-db')">App DB</button>
+                    <button type="button" [class.active]="workspace?.storageMode === 'workspace-codeyo'" (click)="migrateStorage('workspace-codeyo')">.codeyo/</button>
+                  </div>
+                </article>
+
+                <article class="settings-card">
+                  <span class="mono tiny">Toolchain</span>
+                  <label>
+                    <span>Python Command</span>
+                    <input
+                      type="text"
+                      aria-label="Python command"
+                      [value]="pythonExecutable"
+                      (input)="updatePythonExecutable($event)"
+                    />
+                  </label>
+                  <label>
+                    <span>C++ Compiler</span>
+                    <input
+                      type="text"
+                      aria-label="C++ compiler command"
+                      [value]="cppExecutable"
+                      (input)="updateCppExecutable($event)"
+                    />
+                  </label>
+                  <div class="environment-card settings-environment">
+                    <div>
+                      <span>Environment</span>
+                      <b>{{ environmentSummary }}</b>
+                    </div>
+                    <button class="btn ghost" type="button" [disabled]="environmentBusy" (click)="checkEnvironment()">
+                      {{ environmentBusy ? 'Checking...' : 'Check Tools' }}
+                    </button>
+                    @if (environmentChecks.length > 0) {
+                      <div class="environment-list">
+                        @for (check of environmentChecks; track check.id) {
+                          <article [class.missing]="!check.available">
+                            <strong>{{ check.label }}</strong>
+                            <em>{{ toolCheckStatus(check) }}</em>
+                            <small>{{ check.version || check.message }}</small>
+                          </article>
+                        }
+                      </div>
+                    }
+                  </div>
+                </article>
+
+                <article class="settings-card">
+                  <span class="mono tiny">Safety</span>
+                  <div class="settings-stats">
+                    <span><b>{{ editedFileCount }}</b> Unsaved</span>
+                    <span><b>{{ recoveryBufferCount }}</b> Recovery</span>
+                    <span><b>{{ journalEntries.length }}</b> Journal</span>
+                  </div>
+                  <div class="storage-switch settings-storage" aria-label="Auto-save setting">
+                    <button type="button" [class.active]="!autoSaveEnabled" (click)="setAutoSave(false)">Manual</button>
+                    <button type="button" [class.active]="autoSaveEnabled" (click)="setAutoSave(true)">Auto Save</button>
+                  </div>
+                  <div class="settings-actions">
+                    <button class="btn ghost" type="button" [disabled]="!canSaveAll" (click)="saveAllFiles()">Save All</button>
+                    <button class="btn ghost" type="button" (click)="setRightPanel('files')">Open Recovery</button>
+                  </div>
+                </article>
+              }
+            </section>
+          } @else {
+            <section class="git-panel">
+              <div class="section-label tight"><span>§09</span><b>Git Changes</b><i></i></div>
+              <p class="git-notice">{{ gitNotice }}</p>
+              @if (workspace?.trusted && gitStatus) {
+                <div class="git-branch">
+                  <b>{{ gitStatus.branch }}</b>
+                  <span>↑ {{ gitStatus.ahead }} · ↓ {{ gitStatus.behind }}</span>
+                </div>
+                @if (gitBranches.length > 0) {
+                  <div class="git-checkout">
+                    <label>
+                      <span>Checkout Branch</span>
+                      <select aria-label="Checkout branch" [value]="selectedBranch" (change)="updateSelectedBranch($event)">
+                        @for (branch of gitBranches; track branch) {
+                          <option [value]="branch">{{ branch }}</option>
+                        }
+                      </select>
+                    </label>
+                    <button
+                      class="btn ghost"
+                      type="button"
+                      [disabled]="gitBusy || selectedBranch === gitStatus.branch"
+                      (click)="switchBranch()"
+                    >
+                      Switch
+                    </button>
+                    <button
+                      class="danger-action"
+                      type="button"
+                      [disabled]="gitBusy || !canDeleteSelectedBranch"
+                      (click)="deleteSelectedBranch()"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                }
+                <div class="git-change-totals">
+                  <span><b>{{ stagedGitFiles.length }}</b> Staged <em>+{{ gitStagedSummary.additions }} / -{{ gitStagedSummary.deletions }}</em></span>
+                  <span><b>{{ unstagedGitFiles.length }}</b> Unstaged</span>
+                </div>
+                <div class="git-files">
+                  @if (stagedGitFiles.length > 0) {
+                    <h4>Staged For Commit</h4>
+                    @for (file of stagedGitFiles; track file.path) {
+                      <article [class.comparing]="gitComparison?.path === file.path && gitComparison?.mode === 'staged'">
+                        <span>{{ file.index }}</span>
+                        <b>{{ file.originalPath ? file.originalPath + ' → ' : '' }}{{ file.path }}</b>
+                        <button type="button" [disabled]="gitBusy || gitCompareBusy" (click)="showGitDiff(file.path, 'staged')">Compare</button>
+                        <button type="button" [disabled]="gitBusy" (click)="gitAction({ type: 'unstage', path: file.path, originalPath: file.originalPath })">Unstage</button>
+                      </article>
+                    }
+                  }
+                  @if (unstagedGitFiles.length > 0) {
+                    <h4>Working Tree</h4>
+                    @for (file of unstagedGitFiles; track file.path) {
+                      <article [class.comparing]="gitComparison?.path === file.path && gitComparison?.mode === 'unstaged'">
+                        <span>{{ file.workingTree }}</span>
+                        <b>{{ file.originalPath ? file.originalPath + ' → ' : '' }}{{ file.path }}</b>
+                        <button type="button" [disabled]="gitBusy || gitCompareBusy" (click)="showGitDiff(file.path, 'unstaged')">Compare</button>
+                        <button type="button" [disabled]="gitBusy" (click)="gitAction({ type: 'stage', path: file.path, originalPath: file.originalPath })">Stage</button>
+                        @if (file.workingTree !== '?') {
+                          <button class="danger-action" type="button" [disabled]="gitBusy" (click)="discardGitFile(file.path)">Discard</button>
+                        }
+                      </article>
+                    }
+                  }
+                  @if (stagedGitFiles.length === 0 && unstagedGitFiles.length === 0) {
+                    <p class="git-clean">WORKTREE CLEAN</p>
+                  }
+                </div>
+                <section class="git-commit-desk">
+                  <div class="section-label tight"><span>§10</span><b>Commit Desk</b><i></i></div>
+                  <form class="git-commit" (submit)="reviewCommit(); $event.preventDefault()">
+                    <input
+                      type="text"
+                      aria-label="Commit message"
+                      placeholder="COMMIT MESSAGE"
+                      [value]="commitMessage"
+                      (input)="updateCommitMessage($event)"
+                    />
+                    @if (recentRunResults.length > 0) {
+                      <label class="git-run-evidence">
+                        <span>Run Evidence</span>
+                        <select
+                          aria-label="Attach run evidence to commit"
+                          [value]="selectedCommitRunResultId"
+                          (change)="updateSelectedCommitRun($event)"
+                        >
+                          <option value="">NO RUN EVIDENCE</option>
+                          @for (result of recentRunResults; track result.id) {
+                            <option [value]="result.id">{{ runEvidenceLabel(result) }}</option>
+                          }
+                        </select>
+                      </label>
+                    }
+                    <button class="btn primary" type="submit" [disabled]="gitBusy || !canReviewCommit">Review</button>
+                  </form>
+                  @if (commitReviewOpen) {
+                    <article class="git-commit-review">
+                      <span>Ready To Commit</span>
+                      <p>“{{ commitMessage }}”</p>
+                      <b>{{ gitStagedSummary.files.length }} files · +{{ gitStagedSummary.additions }} / -{{ gitStagedSummary.deletions }}</b>
+                      @for (file of gitStagedSummary.files; track file.path) {
+                        <small>{{ file.path }} · {{ file.binary ? 'binary' : '+' + file.additions + ' / -' + file.deletions }}</small>
+                      }
+                      <div>
+                        <button class="btn ghost" type="button" (click)="cancelCommitReview()">Cancel</button>
+                        <button class="btn accent" type="button" [disabled]="gitBusy" (click)="commitReviewedChanges()">Commit Staged</button>
+                      </div>
+                    </article>
+                  }
+                </section>
+                <form class="git-branch-form" (submit)="createBranch(); $event.preventDefault()">
+                  <input
+                    type="text"
+                    aria-label="New branch name"
+                    placeholder="NEW BRANCH NAME"
+                    [value]="branchName"
+                    (input)="updateBranchName($event)"
+                  />
+                  <button class="btn ghost" type="submit" [disabled]="gitBusy">New Branch</button>
+                </form>
+                <div class="git-remote-actions">
+                  <button class="btn ghost" type="button" [disabled]="gitBusy" (click)="pullRemote()">Pull</button>
+                  <button class="btn accent" type="button" [disabled]="gitBusy" (click)="pushRemote()">
+                    {{ gitBusy ? 'Working...' : 'Push' }}
+                  </button>
+                </div>
+                <section class="git-history">
+                  <div class="section-label tight"><span>§11</span><b>History</b><i></i></div>
+                  <input
+                    class="git-history-search"
+                    type="text"
+                    aria-label="Filter commit history"
+                    placeholder="FILTER BY SHA, AUTHOR, OR MESSAGE"
+                    [value]="gitHistoryQuery"
+                    (input)="updateGitHistoryQuery($event)"
+                  />
+                  <div class="git-history-list">
+                    @for (commit of filteredGitHistory; track commit.revision) {
+                      <button
+                        class="git-history-row"
+                        type="button"
+                        [class.active]="gitHistoryDetail?.revision === commit.revision"
+                        (click)="openGitHistoryCommit(commit)"
+                      >
+                        <span>{{ commit.shortRevision }}</span>
+                        <b>{{ commit.subject }}</b>
+                        <small>{{ commit.author }} · {{ commit.authoredAt.slice(0, 10) }}</small>
+                      </button>
+                    } @empty {
+                      <p class="git-history-empty">{{ gitHistory.length ? 'NO COMMITS MATCH FILTER.' : 'NO COMMITS YET.' }}</p>
+                    }
+                  </div>
+                </section>
+              }
+            </section>
+          }
+        </aside>
+      </div>
+
+      @if (activeChannelView === 'thread') {
+        <footer class="composer">
+          <span>Reply ▸</span>
+          <p>type to compose, ``` for code, @ to mention...<i></i></p>
+          <button class="btn primary" type="button">Send ↵</button>
+        </footer>
+      }
+    </section>
+
+    <section class="artboard dm-board" [class.is-hidden]="focusedScreen !== null && focusedScreen !== 'dm'">
+      <button class="focus-chip" type="button" (click)="focusScreen('dm')">Focus</button>
+
+      <header class="masthead">
+        <div class="mast-brand">
+          <span class="brand-name">codeyo</span>
+          <span class="mono">Correspondence / DM</span>
+          <span class="dm-preview mono">Preview only</span>
+        </div>
+        <div class="mast-actions"><span class="mono">Letters Open · 04</span><span class="keycap">⌘K</span></div>
+      </header>
+
+      <div class="dm-layout">
+        <aside class="letters-list">
+          <div class="dm-title">
+            <span class="mono tiny">Mailbox</span>
+            <h2>Letters</h2>
+          </div>
+
+          <article class="letter-row active">
+            <span class="avatar">PL</span>
+            <div><h3>plum</h3><p>“memo 是不是就像一个答案小本子?”</p><time>14:22</time></div>
+          </article>
+          <article class="letter-row">
+            <span class="avatar ai">AI<b>AI</b></span>
+            <div><h3>小酥</h3><p>“我把 fib 的解释改成三步了。”</p><time>14:19</time></div>
+          </article>
+          <article class="letter-row">
+            <span class="avatar">JY</span>
+            <div><h3>jay</h3><p>“你看这张树图能不能放频道置顶?”</p><time>14:09</time></div>
+          </article>
+          <article class="letter-row">
+            <span class="avatar muted">KI</span>
+            <div><h3>ki</h3><p>“等会儿一起看资源分享。”</p><time>13:42</time></div>
+          </article>
+        </aside>
+
+        <main class="letter-paper">
+          <header class="letter-head">
+            <span class="mono">To · plum · #7128</span>
+            <h1>Dear plum,</h1>
+            <p>一封关于递归、缓存和不要被栈吓到的小信。</p>
+          </header>
+
+          <section class="letter-stream">
+            <article class="letter theirs">
+              <div class="letter-meta"><b>plum</b><time>14:16</time></div>
+              <p class="with-drop"><span class="drop-cap">我</span>刚刚又跑了一次, 如果 n=40 就卡住。memo 是不是就像一个答案小本子, 下次遇到一样的题就直接翻?</p>
+              <blockquote>“如果是这样, 那递归是不是没有少走路, 只是每条路少走第二遍?”</blockquote>
+              <div class="letter-ps"><b>附:</b> 我把错误截图放在频道里了。</div>
+            </article>
+
+            <div class="letter-reactions"><span>👀 × 2</span><span class="mine">🌿 × 1</span></div>
+
+            <article class="letter mine">
+              <div class="letter-meta"><b>you</b><time>14:18</time></div>
+              <p class="with-drop"><span class="drop-cap">对</span>, 这个比喻很好。memo 像答案小本子, 但它还有一个很工程的名字：用输入当 key, 用输出当 value。</p>
+              <p>你可以先记 fib(0) 和 fib(1), 然后所有更大的 fib 都会慢慢变成查表。</p>
+              <div class="letter-ps"><b>PS:</b> 我建议你先用 decorator 版本, 再手写 dict 版本理解原理。</div>
+            </article>
+
+            <div class="letter-reactions right"><span class="mine">✅ × 1</span><span>💌 × 1</span></div>
+
+            <article class="letter theirs narrow">
+              <div class="letter-meta"><b>plum</b><time>14:21</time></div>
+              <p>明白了! 我先把小本子版本写出来。</p>
+            </article>
+          </section>
+
+          <footer class="dm-composer">
+            <span>Reply ▸</span>
+            <p>write a small letter back to plum<i></i></p>
+            <button class="btn primary" type="button">Send ↵</button>
+          </footer>
+        </main>
+      </div>
+    </section>
+
+    <section class="artboard command-board" [class.is-hidden]="focusedScreen !== null && focusedScreen !== 'command'">
+      <button class="focus-chip" type="button" (click)="focusScreen('command')">Focus</button>
+
+      <div class="ghost-page">
+        <header class="masthead">
+          <div class="mast-brand"><span class="brand-name">codeyo</span><span class="mono">Issue Nº 24 · May 24, 2026</span></div>
+          <div class="mast-actions"><span class="live-pill"><i></i>5 Live</span><span class="keycap">⌘K</span></div>
+        </header>
+        <div class="ghost-grid"><div></div><div></div><div></div></div>
+      </div>
+
+      <div class="palette-scrim">
+        <article class="command-modal">
+          <header>
+            <span>⌘K · Quick Find</span>
+            <b>⇅ Nav · ↵ Open · Esc Close</b>
+          </header>
+
+          <div class="search-hero">
+            <span>what are you looking for?</span>
+            <strong>memo in fib<i></i></strong>
+          </div>
+
+          <section class="result-group">
+            <div class="section-label"><span>§01</span><b>Channels</b><i></i><em>2 Results</em></div>
+            <article class="result-row selected">
+              <b class="result-icon">#</b>
+              <div><h3>作业互助</h3><p>topic contains <mark>memo</mark> and recursion</p></div>
+              <span class="mono">⌘1</span>
+            </article>
+            <article class="result-row">
+              <b class="result-icon">#</b>
+              <div><h3>资源分享</h3><p>cached recursion notes and <mark>memo</mark> recipes</p></div>
+              <span class="mono">⌘2</span>
+            </article>
+          </section>
+
+          <section class="result-group">
+            <div class="section-label"><span>§02</span><b>Messages</b><i></i><em>3 Results</em></div>
+            <article class="result-row">
+              <b class="result-icon">"</b>
+              <div><h3>小酥 wrote: 41 次</h3><p>n=40 with <mark>memo</mark> only needs one value per n</p></div>
+              <span class="mono">14:03</span>
+            </article>
+            <article class="result-row">
+              <b class="result-icon">/</b>
+              <div><h3>Open IDE with memo snippet</h3><p>command · paste optimized fib.py</p></div>
+              <span class="mono">⌘E</span>
+            </article>
+          </section>
+
+          <footer class="ask-ai-row">
+            <span class="avatar ai">AI<b>AI</b></span>
+            <p>Ask 小酥 to explain memo like a tiny notebook.</p>
+            <span class="keycap">⌘↵</span>
+            <button class="btn accent" type="button">Ask 小酥</button>
+          </footer>
+        </article>
+      </div>
+    </section>
+
+    <section class="artboard component-board" [class.is-hidden]="focusedScreen !== null && focusedScreen !== 'components'">
+      <button class="focus-chip" type="button" (click)="focusScreen('components')">Focus</button>
+
+      <header class="masthead">
+        <div class="mast-brand">
+          <span class="brand-name">codeyo</span>
+          <span class="mono">Component Sheet / Editorial Lounge</span>
+        </div>
+        <div class="mast-actions"><span class="mono">12 Column Grid</span><span class="keycap">900H</span></div>
+      </header>
+
+      <main class="component-grid">
+        <article class="primitive span-4">
+          <div class="section-label"><span>§01</span><b>Type Scale</b><i></i></div>
+          <h1>#作业互助</h1>
+          <h2>Dear plum,</h2>
+          <p>Serif carries warmth and messages.</p>
+          <span class="mono sample">Mono carries metadata</span>
+        </article>
+
+        <article class="primitive span-4 palette-block">
+          <div class="section-label"><span>§02</span><b>Palette</b><i></i></div>
+          <div class="swatches">
+            <span style="--sw:#F7F1E3">Paper</span>
+            <span style="--sw:#FCF8EE">Paper2</span>
+            <span style="--sw:#E8C547">Amber</span>
+            <span style="--sw:#D9CCFF">Lavender</span>
+            <span style="--sw:#FFC4A6">Peach</span>
+            <span style="--sw:#A6E0C2">Mint</span>
+          </div>
+        </article>
+
+        <article class="primitive span-4">
+          <div class="section-label"><span>§03</span><b>Buttons</b><i></i></div>
+          <div class="button-demo">
+            <button class="btn primary" type="button">Primary</button>
+            <button class="btn accent" type="button">Accent</button>
+            <button class="btn ghost" type="button">Ghost</button>
+            <button class="btn danger" type="button">Danger</button>
+          </div>
+        </article>
+
+        <article class="primitive span-3">
+          <div class="section-label"><span>§04</span><b>Badges & Tags</b><i></i></div>
+          <div class="tag-demo">
+            <span class="tag amber">Live Study</span>
+            <span class="tag lavender">AI Tutor</span>
+            <span class="tag peach">Mention</span>
+            <span class="tag mint">Online</span>
+          </div>
+        </article>
+
+        <article class="primitive span-3">
+          <div class="section-label"><span>§05</span><b>Reactions</b><i></i></div>
+          <div class="reactions"><span>😭 × 4</span><span class="mine">🔥 × 7</span><button type="button">+</button></div>
+        </article>
+
+        <article class="primitive span-3">
+          <div class="section-label"><span>§06</span><b>Avatars</b><i></i></div>
+          <div class="avatar-line">
+            <span class="avatar large">PL</span>
+            <span class="avatar ai large">AI<b>AI</b></span>
+            <span class="avatar large">JY</span>
+            <span class="avatar muted large">NO</span>
+          </div>
+        </article>
+
+        <article class="primitive span-3">
+          <div class="section-label"><span>§07</span><b>Labels</b><i></i></div>
+          <div class="section-label mini"><span>§08</span><b>Nested</b><i></i></div>
+          <div class="asterism">✦ ✦ ✦</div>
+        </article>
+
+        <article class="primitive span-5">
+          <div class="section-label"><span>§08</span><b>Code Block</b><i></i></div>
+          <div class="code-card ai-code">
+            <div class="code-head"><span>AI ✦</span><b>fib_memo.py · 5 L</b></div>
+            <pre><code><b>01</b>@cache
+<b>02</b>def fib(n):
+<b>03</b>    if n &lt; 2: return n
+<b>04</b>    return fib(n-1) + fib(n-2)
+<b>05</b>print(fib(40))</code></pre>
+            <div class="code-note">[Note] Original 2.1s → 0.0002s</div>
+          </div>
+        </article>
+
+        <article class="primitive span-4">
+          <div class="section-label"><span>§09</span><b>Inputs</b><i></i></div>
+          <label class="search-input">search channels, people, files<i></i></label>
+          <div class="mini-composer"><span>Reply ▸</span><p>paste your code here<i></i></p></div>
+        </article>
+
+        <article class="primitive span-3">
+          <div class="section-label"><span>§10</span><b>Cards</b><i></i></div>
+          <div class="mini-live-card"><em></em><b>Live</b><span>递归室</span></div>
+          <div class="mini-pin-card">“画出来就懂了。”</div>
+        </article>
+
+        <article class="primitive span-12 quote-sheet">
+          <div class="section-label"><span>§11</span><b>Pull Quote</b><i></i></div>
+          <blockquote>
+            <p>“Beginner-friendly does not mean low density. It means every dense thing has a handle.”</p>
+            <cite>Codeyo Editorial Rule</cite>
+          </blockquote>
+        </article>
+      </main>
+    </section>
+  </main>
+</div>

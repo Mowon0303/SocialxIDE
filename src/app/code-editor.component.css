@@ -1,0 +1,9 @@
+.codeyo-editor-host,
+.codeyo-editor-host .cm-editor {
+  height: 100%;
+  min-height: 0;
+}
+
+.codeyo-editor-host .cm-editor.cm-focused {
+  outline: 0;
+}
