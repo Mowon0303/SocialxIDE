@@ -19,7 +19,7 @@
     "desktop:prepare": "npm run desktop:icons && node electron/prepare-desktop-build.cjs",
     "desktop:rebuild": "electron-rebuild -f -w node-pty",
     "desktop": "npm run desktop:build && npm run desktop:rebuild && electron .",
-    "desktop:dev": "electron .",
+    "desktop:dev": "npm run desktop:build && electron .",
     "desktop:pack": "npm run desktop:prepare && electron-builder --dir",
     "desktop:dist": "npm run desktop:prepare && electron-builder",
     "desktop:pack:mac": "node electron/check-package-platform.cjs darwin && npm run desktop:prepare && electron-builder --mac --arm64 --dir",

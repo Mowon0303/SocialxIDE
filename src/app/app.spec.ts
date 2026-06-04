@@ -316,7 +316,7 @@ describe('App', () => {
     expect(compiled.querySelector('.cm-editor')).toBeTruthy();
   });
 
-  it('should toggle the floating assistant panel', () => {
+  it('should toggle the floating assist slot', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.ide-inspector')).toBeTruthy();
@@ -324,6 +324,27 @@ describe('App', () => {
     (fixture.nativeElement.querySelector('.panel-toggle') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.ide-inspector')).toBeFalsy();
+  });
+
+  it('should switch channels and direct messages from the shell navigation', async () => {
+    const channelFixture = TestBed.createComponent(App);
+    const channelApp = channelFixture.componentInstance;
+    channelApp.selectChannel('resources');
+    channelFixture.detectChanges();
+    await channelFixture.whenStable();
+    expect(channelApp.activeChannelId).toBe('resources');
+    expect(channelApp.activeChannelView).toBe('thread');
+    expect(channelFixture.nativeElement.querySelector('.workspace-tabs span')?.textContent).toContain('Snapshots');
+
+    const dmFixture = TestBed.createComponent(App);
+    const dmApp = dmFixture.componentInstance;
+    dmApp.openDm('jay');
+    dmFixture.detectChanges();
+    await dmFixture.whenStable();
+    expect(dmApp.focusedScreen).toBe('dm');
+    expect(dmApp.activeDmThread.name).toBe('jay');
+    expect(dmFixture.nativeElement.querySelector('.letter-head h1')?.textContent).toContain('jay');
+    expect(dmFixture.nativeElement.querySelector('.letter-stream')?.textContent).toContain('树图');
   });
 
   it('should create and remove an editable buffer', () => {

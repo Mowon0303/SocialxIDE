@@ -4,6 +4,15 @@
   min-height: 0;
 }
 
+.codeyo-editor-host {
+  display: block;
+  overflow: hidden;
+}
+
+.codeyo-editor-host .cm-scroller {
+  overflow: auto;
+}
+
 .codeyo-editor-host .cm-editor.cm-focused {
   outline: 0;
 }

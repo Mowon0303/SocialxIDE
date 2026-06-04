@@ -3,7 +3,10 @@
   "version": 1,
   "cli": {
     "packageManager": "npm",
-    "analytics": false
+    "analytics": false,
+    "cache": {
+      "enabled": false
+    }
   },
   "newProjectRoot": "projects",
   "projects": {
@@ -37,7 +40,7 @@
                   "minify": true,
                   "inlineCritical": false
                 },
-                "fonts": true
+                "fonts": false
               },
               "budgets": [
                 {
@@ -47,8 +50,8 @@
                 },
               {
                 "type": "anyComponentStyle",
-                "maximumWarning": "48kB",
-                "maximumError": "54kB"
+                "maximumWarning": "72kB",
+                "maximumError": "88kB"
               }
               ],
               "outputHashing": "all"

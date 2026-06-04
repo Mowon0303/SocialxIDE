@@ -89,6 +89,34 @@ interface ThreadUpdate {
   kind: 'run' | 'review';
 }
 
+interface ChannelItem {
+  id: string;
+  index: string;
+  name: string;
+  topic: string;
+  unread?: number;
+  mention?: boolean;
+  marker?: boolean;
+}
+
+interface DmThread {
+  id: string;
+  initials: string;
+  name: string;
+  preview: string;
+  time: string;
+  title: string;
+  subtitle: string;
+  messages: {
+    author: string;
+    time: string;
+    body: string;
+    mine?: boolean;
+    quote?: string;
+    ps?: string;
+  }[];
+}
+
 interface LineComparison {
   added: number;
   removed: number;
@@ -116,11 +144,13 @@ export class App implements OnInit, OnDestroy {
   readonly isDesktop = typeof window !== 'undefined' && Boolean(window.codeyo);
   focusedScreen: ScreenId | null = 'channels';
   activeChannelView: ChannelView = 'ide';
+  activeChannelId = 'homework';
+  activeDmId = 'plum';
   activeRightPanel: RightPanel = 'files';
   activeConsolePanel: ConsolePanel = 'terminal';
   activeIdePath = 'fib.py';
   assistantPanelOpen = true;
-  assistantNotice = '缓存装饰器已就位。可以运行测试验证，也可以继续手写 dict 版本。';
+  assistantNotice = 'Assist slot is paused for v0.1. Use run output, diagnostics, Git, and journal entries for review.';
   lastSavedAt = '14:24';
   workspaceExpanded = true;
   srcExpanded = true;
@@ -223,6 +253,166 @@ export class App implements OnInit, OnDestroy {
     'fib(40) = 102334155',
     'memo hits: 38 · cache size: 41',
     'done in 0.0002s',
+  ];
+
+  readonly channels: ChannelItem[] = [
+    { id: 'homework', index: '01', name: 'Workspace', topic: 'local buffers · fib.py' },
+    { id: 'chat', index: '02', name: 'Run Logs', topic: 'terminal output · diagnostics', unread: 12 },
+    { id: 'intro', index: '03', name: 'Journal', topic: 'notes · decisions · handoff', unread: 1, mention: true },
+    { id: 'resources', index: '04', name: 'Snapshots', topic: 'review sets · run evidence' },
+    { id: 'bugs', index: '05', name: 'Problems', topic: 'debug desk · blockers', marker: true },
+  ];
+
+  readonly dmThreads: DmThread[] = [
+    {
+      id: 'plum',
+      initials: 'PL',
+      name: 'plum',
+      preview: 'memo 是不是就像一个答案小本子?',
+      time: '2m',
+      title: 'Dear plum,',
+      subtitle: '3 letters today · 47 letters all-time',
+      messages: [
+        {
+          author: 'you',
+          time: '今天 · 14:08',
+          mine: true,
+          body: '看了你贴的 fib - 那是个经典的“重复子问题”。每次 fib(n) 都会去算 fib(n-1) 和 fib(n-2), 而 fib(n-1) 又会再算 fib(n-2)... fib(n-3)...重复爆炸。',
+          ps: '你可以把递归树画出来感受一下, n=5 都已经有 15 个节点了。',
+        },
+        {
+          author: 'plum',
+          time: '今天 · 14:11',
+          body: '哦哦明白！所以 memo 就是把算过的存起来, 下次直接取?',
+        },
+        {
+          author: 'you',
+          time: '今天 · 14:12',
+          mine: true,
+          body: '就是这个。空间换时间 - 多用一个字典换来速度 1000 倍。',
+          ps: '一句话总结：能记住的别再算。',
+        },
+        {
+          author: 'plum',
+          time: '今天 · 14:14',
+          body: '谢谢救命之恩🍀 我去改了',
+        },
+      ],
+    },
+    {
+      id: 'review',
+      initials: 'RV',
+      name: 'Review Notes',
+      preview: 'Run evidence and snapshot notes are ready.',
+      time: '14m',
+      title: 'Dear review log,',
+      subtitle: 'Local notes keep run results and explanations together.',
+      messages: [
+        {
+          author: 'review log',
+          time: '14:19',
+          body: '把 fib 的解释保留成三步：先看重复子问题, 再加 cache, 最后用大输入验证。',
+        },
+        {
+          author: 'you',
+          time: '14:20',
+          mine: true,
+          body: '保持这个结构。等会儿把 run evidence 附到 review snapshot 里。',
+        },
+      ],
+    },
+    {
+      id: 'jay',
+      initials: 'JY',
+      name: 'jay',
+      preview: '库图发你了, 同关我们...',
+      time: '1h',
+      title: 'Dear jay,',
+      subtitle: '递归树草图和频道置顶建议。',
+      messages: [
+        {
+          author: 'jay',
+          time: '14:09',
+          body: '你看这张树图能不能放频道置顶? 左边展开, 右边 memo 后收束。',
+        },
+        {
+          author: 'you',
+          time: '14:12',
+          mine: true,
+          body: '可以, 先放到 Snapshots, 再在 Workspace 里引用。',
+        },
+      ],
+    },
+    {
+      id: 'kiwi',
+      initials: 'K',
+      name: 'kiwi',
+      preview: '直播结束！谢谢来听 ❤',
+      time: '3h',
+      title: 'Dear kiwi,',
+      subtitle: '直播排期和 React 片段。',
+      messages: [
+        {
+          author: 'kiwi',
+          time: '今天 · 13:42',
+          body: '直播结束！谢谢来听。我想把 memo 例子做成下次直播里的第一个片段。',
+        },
+        {
+          author: 'you',
+          time: '今天 · 13:47',
+          mine: true,
+          body: '可以, 我先把 IDE 里的 fib.py 保存成 review snapshot。',
+        },
+      ],
+    },
+    {
+      id: 'nori',
+      initials: 'N',
+      name: 'nori',
+      preview: '问包那个, 我重新写了',
+      time: 'YD',
+      title: 'Dear nori,',
+      subtitle: '重写记录和包管理笔记。',
+      messages: [
+        {
+          author: 'nori',
+          time: '昨天 · 18:04',
+          body: '问包那个, 我重新写了。现在 import 和 run profile 都清楚多了。',
+        },
+      ],
+    },
+    {
+      id: 'mochi',
+      initials: 'M',
+      name: 'mochi',
+      preview: '看到你的提交了, 干净',
+      time: 'YD',
+      title: 'Dear mochi,',
+      subtitle: '关于干净提交和 review snapshot。',
+      messages: [
+        {
+          author: 'mochi',
+          time: '昨天 · 16:10',
+          body: '看到你的提交了, 干净。那个 snapshot 对比特别适合给新人看。',
+        },
+      ],
+    },
+    {
+      id: 'tofu',
+      initials: 'T',
+      name: 'tofu',
+      preview: '《升鲸录》写好了 lol',
+      time: '2D',
+      title: 'Dear tofu,',
+      subtitle: '频道小报和周末片段。',
+      messages: [
+        {
+          author: 'tofu',
+          time: '周二 · 21:30',
+          body: '《升鲸录》写好了 lol。等你把 component sheet 也放进去。',
+        },
+      ],
+    },
   ];
 
   readonly ideFiles: IdeFile[] = [
@@ -725,6 +915,14 @@ export class App implements OnInit, OnDestroy {
     ];
   }
 
+  get activeChannel(): ChannelItem {
+    return this.channels.find((channel) => channel.id === this.activeChannelId) ?? this.channels[0];
+  }
+
+  get activeDmThread(): DmThread {
+    return this.dmThreads.find((thread) => thread.id === this.activeDmId) ?? this.dmThreads[0];
+  }
+
   focusScreen(screen: ScreenId): void {
     this.focusedScreen = screen;
   }
@@ -752,6 +950,21 @@ export class App implements OnInit, OnDestroy {
   setChannelView(view: ChannelView): void {
     this.activeChannelView = view;
     this.activeRightPanel = view === 'ide' ? 'files' : 'contributors';
+  }
+
+  selectChannel(channelId: string): void {
+    this.activeChannelId = channelId;
+    this.activeChannelView = 'thread';
+    this.activeRightPanel = 'contributors';
+  }
+
+  openDm(threadId = this.activeDmId): void {
+    this.activeDmId = threadId;
+    this.focusScreen('dm');
+  }
+
+  selectDm(threadId: string): void {
+    this.activeDmId = threadId;
   }
 
   setRightPanel(panel: RightPanel): void {
@@ -983,7 +1196,7 @@ export class App implements OnInit, OnDestroy {
     ];
     this.activeIdeFile.status = 'edited';
     this.runOutput = [
-      '$ apply patch 小酥/memo',
+      '$ apply patch review/memo',
       'inserted functools.cache decorator',
       'duplicate recursion now cached',
       'run again to compare speed',
@@ -991,7 +1204,7 @@ export class App implements OnInit, OnDestroy {
     this.lastRunTarget = 'fib.py';
     this.activeConsolePanel = 'terminal';
     this.runShared = false;
-    this.assistantNotice = '已插入 @cache。运行 fib.py 或 tests.py, 对比缓存后的表现。';
+    this.assistantNotice = 'Patch applied from the local review demo. Verify it with Run or Tests.';
   }
 
   setConsolePanel(panel: ConsolePanel): void {
@@ -1311,7 +1524,7 @@ export class App implements OnInit, OnDestroy {
         '$ pytest tests.py',
         '1 test passed · 3 assertions',
         'suggestion: add fib(40) to verify memo speed',
-        '小酥: use Add Large Test',
+        'review: add fib(40) to cover the memo path',
       ];
       return;
     }
@@ -1321,7 +1534,7 @@ export class App implements OnInit, OnDestroy {
       '$ pytest tests.py',
       '1 test passed · 3 assertions',
       'performance: fib(40) repeats work',
-      '小酥: apply memo patch before submitting',
+      'review: add memoization before submitting',
     ];
   }
 
@@ -1348,12 +1561,12 @@ export class App implements OnInit, OnDestroy {
         );
         this.activeIdeFile.status = 'edited';
         this.runOutput = [
-          '$ apply patch 小酥/tests',
+          '$ apply patch review/tests',
           'added test_large_value for fib(40)',
           'run tests to verify memo path',
         ];
         this.activeConsolePanel = 'terminal';
-        this.assistantNotice = '大输入测试已加入。现在 Run Tests 会覆盖 memo 场景。';
+        this.assistantNotice = 'Large input test added. Run Tests now covers the memo path.';
         return;
       }
 
@@ -1364,8 +1577,8 @@ export class App implements OnInit, OnDestroy {
     this.activeConsolePanel = 'problems';
     this.assistantNotice =
       this.activeIdeFile.name === 'notes.md'
-        ? '建议补充 key/value 的一句定义, 初学者更容易把 memo 和字典联系起来。'
-        : '当前 buffer 结构有效。先实现 solve(), 再用 terminal 运行验证。';
+        ? 'Review note: add one key/value sentence so memo maps clearly to a dictionary.'
+        : 'Review note: implement solve(), then verify from the terminal.';
   }
 
   shareRunToThread(): void {
@@ -1424,7 +1637,7 @@ export class App implements OnInit, OnDestroy {
       this.runOutput = [
         '$ preview notes.md',
         'rendered memo notes · 7 lines',
-        'linked mention: @小酥',
+        'linked review note: memo glossary',
         `done at ${timestamp}`,
       ];
       return;
@@ -1453,7 +1666,7 @@ export class App implements OnInit, OnDestroy {
       this.runOutput = [
         '$ python fib.py',
         'NameError: fib is not defined',
-        '小酥: 先保留 def fib(n), 再改递归体。',
+        'review: keep def fib(n), then change the recursive body.',
         `failed at ${timestamp}`,
       ];
       return;
@@ -1465,7 +1678,7 @@ export class App implements OnInit, OnDestroy {
         '$ python fib.py',
         'fib(40) = 102334155',
         'warning: repeated recursion detected · ~1.6e8 calls',
-        '小酥: try Apply Memo Patch',
+        'review: add memoization and rerun tests',
         `done at ${timestamp}`,
       ];
       return;

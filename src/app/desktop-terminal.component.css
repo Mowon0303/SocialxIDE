@@ -120,9 +120,15 @@
 
 .desktop-terminal-host {
   background: #1a1a1a;
+  height: 100%;
   min-height: 0;
   overflow: hidden;
   padding: 7px 8px;
+}
+
+.desktop-terminal-host .xterm,
+.desktop-terminal-host .xterm-viewport {
+  height: 100%;
 }
 
 .terminal-disabled {
@@ -156,4 +162,45 @@
 
 .desktop-terminal-host.is-disabled {
   opacity: 0.36;
+}
+
+/* Refined/Fused terminal shell */
+.terminal-session-bar {
+  background: #fffdf8;
+  border-bottom: 1px solid rgba(33, 31, 28, 0.28);
+}
+
+.terminal-session-bar button {
+  color: #4a433b;
+}
+
+.terminal-tab {
+  border-right: 1px solid rgba(33, 31, 28, 0.16);
+}
+
+.terminal-tab.active {
+  background: #faeab5;
+  box-shadow: inset 0 -2px 0 #e8c547;
+  color: #211f1c;
+}
+
+.terminal-tab-action {
+  border-left: 1px solid rgba(33, 31, 28, 0.13) !important;
+}
+
+.terminal-rename input {
+  background: #fffdf8;
+  border: 1px solid rgba(33, 31, 28, 0.28);
+  border-radius: 5px;
+  color: #211f1c;
+}
+
+.terminal-rename button,
+.terminal-session-bar button.terminal-new {
+  color: #b89a2c;
+}
+
+.desktop-terminal-host {
+  background: #171717;
+  padding: 8px;
 }

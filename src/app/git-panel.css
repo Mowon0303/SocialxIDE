@@ -721,3 +721,99 @@
   font-size: 8px;
   padding: 5px 8px;
 }
+
+/* Refined/Fused Git surface */
+.git-panel {
+  background: transparent;
+}
+
+.git-notice,
+.git-branch,
+.git-change-totals,
+.git-files,
+.git-clean,
+.git-commit,
+.git-branch-form,
+.git-run-evidence,
+.git-commit-review,
+.git-history,
+.git-snapshot-draft,
+.snapshot-hunk-desk,
+.git-hunk-desk {
+  background: var(--el-panel);
+  border: 1px solid var(--el-hairline-strong);
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.git-notice {
+  background: var(--el-amber-soft);
+  border-color: rgba(184, 154, 44, 0.48);
+  color: var(--el-ink);
+}
+
+.git-branch {
+  border-color: var(--el-hairline);
+}
+
+.git-files h4 {
+  background: transparent;
+  border-bottom: 1px solid var(--el-hairline);
+  color: var(--el-ink-2);
+}
+
+.git-files article,
+.git-history-row,
+.snapshot-hunk-desk article,
+.git-hunk-desk article {
+  background: var(--el-paper-2);
+  border-color: var(--el-hairline);
+  border-radius: 7px;
+}
+
+.git-files article.comparing,
+.git-history-row.active {
+  background: var(--el-amber-soft);
+  border-color: rgba(184, 154, 44, 0.55);
+}
+
+.git-files article button,
+.git-remote-actions button,
+.git-commit button,
+.git-branch-form button,
+.snapshot-hunk-desk article button,
+.git-hunk-actions .btn {
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.git-commit input,
+.git-commit select,
+.git-branch-form input,
+.git-history-search,
+.git-snapshot-draft textarea,
+.git-snapshot-fields select,
+.git-checkout select,
+.git-run-evidence select {
+  background: var(--el-paper-2);
+  border: 1px solid var(--el-hairline-strong);
+  border-radius: 7px;
+  box-shadow: none;
+}
+
+.git-run-evidence span,
+.git-commit-review span,
+.git-change-totals span {
+  background: var(--el-paper-2);
+  border: 1px solid var(--el-hairline);
+  border-radius: 7px;
+}
+
+.git-history-list {
+  gap: 6px;
+}
+
+.snapshot-hunk-desk > div,
+.git-hunk-desk > div {
+  border-bottom: 1px solid var(--el-hairline);
+}

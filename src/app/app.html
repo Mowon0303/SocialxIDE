@@ -1,20 +1,31 @@
 <div class="studio-shell" [class.is-focused]="focusedScreen !== null">
-  <header class="studio-nav">
-    <div class="studio-brand">
-      <strong>Codeyo</strong>
-      <span>Editorial Lounge Design Canvas</span>
-    </div>
+  <header class="studio-nav" [class.dm-mode]="focusedScreen === 'dm'">
+    @if (focusedScreen === 'dm') {
+      <div class="studio-brand dm-nav-brand">
+        <strong>codeyo</strong>
+        <span class="studio-divider"></span>
+        <span>Correspondence</span>
+      </div>
 
-    <nav aria-label="Screens">
-      <button type="button" (click)="focusScreen('channels')">§01 Channels</button>
-      <button type="button" (click)="focusScreen('dm')">§02 DM</button>
-      <button type="button" (click)="focusScreen('command')">§03 Command</button>
-      <button type="button" (click)="focusScreen('components')">§04 Sheet</button>
-    </nav>
+      <div class="studio-actions">
+        <button class="studio-context-action" type="button" (click)="focusScreen('channels')">← Workspace</button>
+      </div>
+    } @else {
+      <div class="studio-brand">
+        <strong>Codeyo</strong>
+        <span>Local Workspace IDE</span>
+      </div>
 
-    <button class="studio-reset" type="button" (click)="clearFocus()" [disabled]="focusedScreen === null">
-      View All
-    </button>
+      <nav aria-label="Screens">
+        <button type="button" (click)="focusScreen('channels'); setChannelView('ide')">§01 Workspace</button>
+        <button type="button" (click)="focusScreen('channels'); setChannelView('thread')">§02 Journal</button>
+        <button type="button" (click)="focusScreen('command')">§03 Command</button>
+      </nav>
+
+      <div class="studio-actions">
+        <span class="release-pill">v0.1 dogfood</span>
+      </div>
+    }
   </header>
 
   <main class="design-canvas">
@@ -24,41 +35,55 @@
       <div class="channels-layout">
         <aside class="left-rail">
           <div class="server-card">
-            <span class="mono tiny">Server 01 / 5</span>
-            <h2>PY 一起学</h2>
+            <span class="mono tiny">Workspace 01 / local</span>
+            <h2>Codeyo Workspace</h2>
             <div class="avatar-stack">
-              <span class="avatar blue">K</span>
-              <span class="avatar green">P</span>
-              <span class="avatar coral">J</span>
-              <span class="avatar minty">小</span>
-              <span class="avatar muted">+83</span>
+              <span class="avatar blue">WS</span>
+              <span class="avatar green">RN</span>
+              <span class="avatar coral">GT</span>
+              <span class="avatar minty">RV</span>
+              <span class="avatar muted">v1</span>
             </div>
           </div>
 
-          <div class="section-label"><span>§01</span><b>Channels</b><i></i></div>
+          <div class="section-label"><span>§01</span><b>Workspace</b><i></i></div>
           <div class="channel-list">
-            <button class="channel active" type="button"><em>01</em><span>作业互助</span></button>
-            <button class="channel unread" type="button"><em>02</em><span>日常水群</span><b>12</b></button>
-            <button class="channel mention" type="button"><em>03</em><span>新人报到</span><b>1</b></button>
-            <button class="channel" type="button"><em>04</em><span>资源分享</span></button>
-            <button class="channel" type="button"><em>05</em><span>bug-救救我</span><strong>•</strong></button>
+            @for (channel of channels; track channel.id) {
+              <button
+                class="channel"
+                type="button"
+                [class.active]="activeChannelId === channel.id"
+                [class.unread]="channel.unread"
+                [class.mention]="channel.mention"
+                (click)="selectChannel(channel.id)"
+              >
+                <em>{{ channel.index }}</em>
+                <span>{{ channel.name }}</span>
+                @if (channel.unread) {
+                  <b>{{ channel.unread }}</b>
+                }
+                @if (channel.marker) {
+                  <strong>•</strong>
+                }
+              </button>
+            }
           </div>
 
-          <div class="section-label"><span>§02</span><b>Live Now</b><i></i></div>
+          <div class="section-label"><span>§02</span><b>Review Desk</b><i></i></div>
           <article class="live-card">
-            <div><em></em><span class="mono">Live · 287 Watch</span></div>
-            <h3>kiwi 在直播 React</h3>
-            <p>投票器组件：从 useState 到 reducer</p>
+            <div><em></em><span class="mono">Local · Run Evidence</span></div>
+            <h3>Snapshots and journal</h3>
+            <p>Use run output, Git context, and notes as the review source of truth.</p>
           </article>
 
-          <div class="pair-card"><span>pair-1 · plum, nori</span><i></i></div>
+          <div class="pair-card"><span>Future assist slot · reserved</span><i></i></div>
 
           <div class="section-label"><span>§03</span><b>Tools</b><i></i></div>
           <div class="tool-list">
-            <span>IDE Workspace <b>⌘E</b></span>
-            <span>GUI ↔ Term <mark>New</mark></span>
+            <span>Open Folder <b>⌘O</b></span>
+            <span>Run ↔ Git <mark>v0.1</mark></span>
           </div>
-          <div class="volume-note">Vol. III · Cont'd P.2</div>
+          <div class="volume-note">Local-first · single user</div>
         </aside>
 
         <main class="channel-main" [class.ide-active]="activeChannelView === 'ide'">
@@ -77,7 +102,7 @@
             >
               IDE Workspace
             </button>
-            <span>pair-1 · plum, nori · fib.py</span>
+            <span>{{ activeChannel.name }} · {{ activeChannelView === 'ide' ? 'IDE Workspace' : activeChannel.topic }}</span>
           </nav>
 
           @if (activeChannelView === 'thread') {
@@ -156,7 +181,7 @@
                     <time>{{ update.time }} · {{ update.kind === 'review' ? 'REVIEW REQUEST' : 'SHARED RUN' }}</time>
                   </div>
                   @if (update.kind === 'review') {
-                    <p>请 <strong>@小酥 @plum</strong> 帮忙看一下 <strong>{{ update.file }}</strong>：</p>
+                    <p>把 <strong>{{ update.file }}</strong> 加入 review log：</p>
                     <code>REVIEW · {{ update.result }}</code>
                   } @else {
                     <p>刚刚从 IDE 发布了 <strong>{{ update.file }}</strong> 的运行结果：</p>
@@ -171,7 +196,7 @@
                 <span class="avatar">PL</span>
               <div class="message-body">
                 <div class="message-meta"><b>plum</b><time>14:02</time></div>
-                <p class="serif-copy with-drop"><span class="drop-cap">救</span>命 这道题我写到第三层就栈溢出了 <mark>@小酥</mark> 能看看吗?</p>
+                <p class="serif-copy with-drop"><span class="drop-cap">记</span>录一下这次 fib.py 的性能问题：递归能跑通，但大输入会重复计算。</p>
                 <div class="code-card">
                   <div class="code-head"><span>Code / Python</span><b>fib.py · 5 行</b></div>
                   <pre><code><b>01</b>def fib(n):
@@ -186,17 +211,17 @@
               </article>
 
               <aside class="pull-quote">
-                <p>“1.6 亿次计算 → 加 memo 后 41 次。差距 4000000×。”</p>
-                <span>小酥, AI 助教</span>
+                <p>“1.6 亿次计算 -> 加 memo 后 41 次。差距 4000000x。”</p>
+                <span>Run evidence</span>
               </aside>
 
-              <article class="message ai-message">
-              <span class="avatar ai">AI<b>AI</b></span>
+              <article class="message">
+              <span class="avatar cyan">RV</span>
               <div class="message-body">
-                <div class="message-meta"><b>小酥</b><time>14:03 · AI 助教</time></div>
-                <p class="serif-copy">看到啦 plum 🍀 你的版本每次都重算重复值, n=40 大概 1.6 亿次计算。加 memo 就能 1000× 提速:</p>
-                <div class="code-card ai-code">
-                  <div class="code-head"><span>AI ✦</span><b>fib_memo.py · 7 L</b></div>
+                <div class="message-meta"><b>review log</b><time>14:03 · local note</time></div>
+                <p class="serif-copy">把修复前后的代码和运行结果放在同一条记录里，后面创建 snapshot 时可以直接引用。</p>
+                <div class="code-card">
+                  <div class="code-head"><span>Patch / Python</span><b>fib_memo.py · 7 L</b></div>
                   <pre><code><b>01</b>from functools import cache
 <b>02</b>
 <b>03</b>@cache
@@ -243,7 +268,7 @@
               <div class="message-body">
                 <div class="message-meta"><b>nori</b><time>14:11</time></div>
                 <p class="serif-copy">楼上画得真好...我也试试 memo</p>
-                <div class="typing-row"><span class="mono">小酥 is typing</span><i></i><i></i><i></i></div>
+                <div class="typing-row"><span class="mono">review log updated</span><i></i><i></i><i></i></div>
               </div>
               </article>
             </div>
@@ -442,7 +467,7 @@
                       [class.active]="assistantPanelOpen"
                       (click)="toggleAssistantPanel()"
                     >
-                      {{ assistantPanelOpen ? 'Hide AI' : 'Show AI' }}
+                      {{ assistantPanelOpen ? 'Hide Assist' : 'Show Assist' }}
                     </button>
                     <button class="btn ghost" type="button" (click)="saveCurrentFile()">Save ⌘S</button>
                     @if (canSaveAll) {
@@ -697,9 +722,9 @@
                 <aside class="ide-inspector">
                   <button class="assistant-close" type="button" (click)="toggleAssistantPanel()">Close ×</button>
                   <article class="ai-note-card">
-                    <div class="section-label tight"><span>§07</span><b>小酥 Notes</b><i></i></div>
-                    <p>“{{ assistantMessage }}”</p>
-                    <button class="btn primary" type="button" (click)="performAssistantAction()">{{ assistantActionLabel }}</button>
+                    <div class="section-label tight"><span>§07</span><b>Future Assist</b><i></i></div>
+                    <p>This slot is reserved for future assisted review. v0.1 keeps it passive and uses Problems, Run Evidence, Git, and Journal as the source of truth.</p>
+                    <button class="btn ghost" type="button" disabled>Reserved</button>
                     <small>{{ assistantNotice }}</small>
                   </article>
 
@@ -835,7 +860,7 @@
               [class.active]="activeRightPanel === 'contributors'"
               (click)="setRightPanel('contributors')"
             >
-              Contributors
+              Review
             </button>
             <button
               type="button"
@@ -864,41 +889,41 @@
 
           @if (activeRightPanel === 'contributors') {
             <article class="today-card">
-              <div class="section-label tight"><span>§00</span><b>Today's Edition</b><i></i></div>
-              <p>“一道递归题, 把整个频道带进了‘什么是记忆化’。”</p>
-              <small>Curated by 小酥 · 14:11</small>
+              <div class="section-label tight"><span>§00</span><b>Review Chain</b><i></i></div>
+              <p>“一次运行、一次 Git diff、一次 review snapshot，组成 v0.1 的完整反馈链。”</p>
+              <small>Local journal · 14:11</small>
             </article>
 
-            <div class="section-label"><span>§04</span><b>Contributors</b><i></i></div>
+            <div class="section-label"><span>§04</span><b>Review Surface</b><i></i></div>
             <div class="people-list">
               <article class="person-row">
                 <span class="avatar blue">K</span>
-                <div><b>kiwi</b><span>Live · React 直播中</span></div>
-                <mark>Live</mark>
+                <div><b>Run Evidence</b><span>Latest stdout and diagnostics</span></div>
+                <mark>Ready</mark>
               </article>
               <article class="person-row hovered">
-                <span class="avatar ai">AI<b>AI</b></span>
-                <div><b>小酥</b><span>AI tutor · memo</span></div>
+                <span class="avatar muted">AS</span>
+                <div><b>Future Assist</b><span>Reserved until behavior is reliable</span></div>
                 <aside class="profile-popover">
                   <div class="popover-top">
-                    <span class="avatar ai large">AI<b>AI</b></span>
-                    <div><b>小酥</b><span>AI 助教 · online</span></div>
+                    <span class="avatar muted large">AS</span>
+                    <div><b>Future Assist</b><span>disabled in v0.1</span></div>
                   </div>
-                  <p>擅长把抽象算法讲成小图和短注释。正在关注 plum 的栈溢出问题。</p>
-                  <div class="popover-actions"><button type="button">DM</button><button type="button">Settings</button></div>
+                  <p>Kept as a visible integration slot. The current release does not pretend to provide model feedback.</p>
+                  <div class="popover-actions"><button type="button" disabled>Reserved</button><button type="button" (click)="setRightPanel('settings')">Settings</button></div>
                 </aside>
               </article>
               <article class="person-row">
-                <span class="avatar">PL</span>
-                <div><b>plum</b><span>写作业</span></div>
+                <span class="avatar">JN</span>
+                <div><b>Journal</b><span>Notes and decisions</span></div>
               </article>
               <article class="person-row">
-                <span class="avatar coral">J</span>
-                <div><b>jay</b><span>画递归树</span></div>
+                <span class="avatar coral">GT</span>
+                <div><b>Git Diff</b><span>Review changed files</span></div>
               </article>
               <article class="person-row">
-                <span class="avatar cyan">N</span>
-                <div><b>nori</b><span>写作业</span></div>
+                <span class="avatar cyan">PR</span>
+                <div><b>Problems</b><span>Diagnostics and warnings</span></div>
               </article>
               <article class="person-row">
                 <span class="avatar green">S</span>
@@ -1003,7 +1028,7 @@
                           @if (entry.file.name === 'fib.py') {
                             <em class="avatar small">PL</em><em class="avatar small cyan">NO</em>
                           } @else if (entry.file.name === 'notes.md') {
-                            <em class="avatar small ai">AI<b>AI</b></em>
+                            <em class="avatar small cyan">RV</em>
                           } @else if (entry.file.name === 'tests.py') {
                             <em class="avatar small coral">J</em>
                           } @else {
@@ -1040,10 +1065,10 @@
 
               <article class="file-bubble-card">
                 <div class="bubble-row">
-                  <span class="avatar">PL</span>
-                  <span class="avatar cyan">NO</span>
+                  <span class="avatar">WS</span>
+                  <span class="avatar cyan">RN</span>
                 </div>
-                <p>{{ isDesktop ? '正在编辑' : '正在同看' }} <b>{{ activeIdeFile.name }}</b>。Run 输出会同步到 terminal。</p>
+                <p>正在编辑 <b>{{ activeIdeFile.name }}</b>。Run 输出会同步到 terminal。</p>
               </article>
 
               <article class="file-bubble-card amber">
@@ -1062,7 +1087,7 @@
                     <button class="danger-action" type="button" (click)="deleteActiveFile()">Delete</button>
                   }
                   @if (!assistantPanelOpen) {
-                    <button type="button" (click)="showAssistantPanel()">Show AI</button>
+                    <button type="button" (click)="showAssistantPanel()">Show Assist</button>
                   }
                 </div>
               </article>
@@ -1402,75 +1427,72 @@
     <section class="artboard dm-board" [class.is-hidden]="focusedScreen !== null && focusedScreen !== 'dm'">
       <button class="focus-chip" type="button" (click)="focusScreen('dm')">Focus</button>
 
-      <header class="masthead">
-        <div class="mast-brand">
-          <span class="brand-name">codeyo</span>
-          <span class="mono">Correspondence / DM</span>
-          <span class="dm-preview mono">Preview only</span>
-        </div>
-        <div class="mast-actions"><span class="mono">Letters Open · 04</span><span class="keycap">⌘K</span></div>
-      </header>
-
       <div class="dm-layout">
         <aside class="letters-list">
-          <div class="dm-title">
-            <span class="mono tiny">Mailbox</span>
-            <h2>Letters</h2>
-          </div>
+          <div class="section-label"><span>§01</span><b>Correspondence</b><i></i></div>
+          <label class="letter-search">search letters...<kbd>⌘F</kbd></label>
 
-          <article class="letter-row active">
-            <span class="avatar">PL</span>
-            <div><h3>plum</h3><p>“memo 是不是就像一个答案小本子?”</p><time>14:22</time></div>
-          </article>
-          <article class="letter-row">
-            <span class="avatar ai">AI<b>AI</b></span>
-            <div><h3>小酥</h3><p>“我把 fib 的解释改成三步了。”</p><time>14:19</time></div>
-          </article>
-          <article class="letter-row">
-            <span class="avatar">JY</span>
-            <div><h3>jay</h3><p>“你看这张树图能不能放频道置顶?”</p><time>14:09</time></div>
-          </article>
-          <article class="letter-row">
-            <span class="avatar muted">KI</span>
-            <div><h3>ki</h3><p>“等会儿一起看资源分享。”</p><time>13:42</time></div>
-          </article>
+          @for (thread of dmThreads; track thread.id) {
+            <button class="letter-row" type="button" [class.active]="activeDmId === thread.id" (click)="selectDm(thread.id)">
+              <span class="avatar" [class.muted]="thread.id === 'kiwi'">{{ thread.initials }}</span>
+              <div>
+                <h3>{{ thread.name }}</h3>
+                <p>{{ thread.preview }}</p>
+              </div>
+              <time>{{ thread.time }}</time>
+              @if (thread.id === 'review') {
+                <strong>1</strong>
+              }
+            </button>
+          }
         </aside>
 
         <main class="letter-paper">
           <header class="letter-head">
-            <span class="mono">To · plum · #7128</span>
-            <h1>Dear plum,</h1>
-            <p>一封关于递归、缓存和不要被栈吓到的小信。</p>
+            <span class="avatar large">{{ activeDmThread.initials }}</span>
+            <div>
+              <span class="mono">To · {{ activeDmThread.name }} · #7128</span>
+              <h1>{{ activeDmThread.title }}</h1>
+              <p>{{ activeDmThread.subtitle }}</p>
+            </div>
+            <div class="letter-actions">
+              <button class="btn ghost compact" type="button">+ 投递到 IDE</button>
+              <button class="btn ghost square" type="button">··</button>
+            </div>
           </header>
 
           <section class="letter-stream">
-            <article class="letter theirs">
-              <div class="letter-meta"><b>plum</b><time>14:16</time></div>
-              <p class="with-drop"><span class="drop-cap">我</span>刚刚又跑了一次, 如果 n=40 就卡住。memo 是不是就像一个答案小本子, 下次遇到一样的题就直接翻?</p>
-              <blockquote>“如果是这样, 那递归是不是没有少走路, 只是每条路少走第二遍?”</blockquote>
-              <div class="letter-ps"><b>附:</b> 我把错误截图放在频道里了。</div>
-            </article>
-
-            <div class="letter-reactions"><span>👀 × 2</span><span class="mine">🌿 × 1</span></div>
-
-            <article class="letter mine">
-              <div class="letter-meta"><b>you</b><time>14:18</time></div>
-              <p class="with-drop"><span class="drop-cap">对</span>, 这个比喻很好。memo 像答案小本子, 但它还有一个很工程的名字：用输入当 key, 用输出当 value。</p>
-              <p>你可以先记 fib(0) 和 fib(1), 然后所有更大的 fib 都会慢慢变成查表。</p>
-              <div class="letter-ps"><b>PS:</b> 我建议你先用 decorator 版本, 再手写 dict 版本理解原理。</div>
-            </article>
-
-            <div class="letter-reactions right"><span class="mine">✅ × 1</span><span>💌 × 1</span></div>
-
-            <article class="letter theirs narrow">
-              <div class="letter-meta"><b>plum</b><time>14:21</time></div>
-              <p>明白了! 我先把小本子版本写出来。</p>
-            </article>
+            @for (message of activeDmThread.messages; track message.author + message.time + message.body; let index = $index) {
+              <article class="letter" [class.mine]="message.mine" [class.theirs]="!message.mine" [class.narrow]="message.body.length < 32" [class.drop-cap]="message.mine && index === 0">
+                <div class="letter-meta">
+                  @if (!message.mine) {
+                    <span class="avatar micro">{{ activeDmThread.initials }}</span>
+                  }
+                  <b>{{ message.author }}</b>
+                  <time>{{ message.time }}</time>
+                </div>
+                <p>{{ message.body }}</p>
+                @if (message.quote) {
+                  <blockquote>“{{ message.quote }}”</blockquote>
+                }
+                @if (message.ps) {
+                  <div class="letter-ps"><b>{{ message.mine ? 'PS:' : '附:' }}</b> {{ message.ps }}</div>
+                }
+              </article>
+              @if (!message.mine) {
+                <div class="letter-reactions"><span>💡 × 2</span></div>
+              }
+              @if (message.mine && index === 2) {
+                <div class="letter-reactions right"><span>🍀 × 1</span></div>
+              }
+            }
+            <div class="asterism">✦ ✦ ✦</div>
           </section>
 
           <footer class="dm-composer">
-            <span>Reply ▸</span>
-            <p>write a small letter back to plum<i></i></p>
+            <span>Postscript ▸</span>
+            <p>continue the correspondence...<i></i></p>
+            <small>Shift+Return ↵ newline</small>
             <button class="btn primary" type="button">Send ↵</button>
           </footer>
         </main>
@@ -1483,7 +1505,7 @@
       <div class="ghost-page">
         <header class="masthead">
           <div class="mast-brand"><span class="brand-name">codeyo</span><span class="mono">Issue Nº 24 · May 24, 2026</span></div>
-          <div class="mast-actions"><span class="live-pill"><i></i>5 Live</span><span class="keycap">⌘K</span></div>
+          <div class="mast-actions"><span class="live-pill"><i></i>Local</span><span class="keycap">⌘K</span></div>
         </header>
         <div class="ghost-grid"><div></div><div></div><div></div></div>
       </div>
@@ -1497,42 +1519,65 @@
 
           <div class="search-hero">
             <span>what are you looking for?</span>
-            <strong>memo in fib<i></i></strong>
+            <strong>fib<i></i></strong>
           </div>
 
           <section class="result-group">
-            <div class="section-label"><span>§01</span><b>Channels</b><i></i><em>2 Results</em></div>
+            <div class="section-label"><span>§01</span><b>Recently Visited</b><i></i><em>1 Results</em></div>
             <article class="result-row selected">
               <b class="result-icon">#</b>
-              <div><h3>作业互助</h3><p>topic contains <mark>memo</mark> and recursion</p></div>
-              <span class="mono">⌘1</span>
-            </article>
-            <article class="result-row">
-              <b class="result-icon">#</b>
-              <div><h3>资源分享</h3><p>cached recursion notes and <mark>memo</mark> recipes</p></div>
-              <span class="mono">⌘2</span>
+              <div><h3>Workspace</h3><p>Local buffers · run evidence</p></div>
+              <span class="keycap">↵</span>
             </article>
           </section>
 
           <section class="result-group">
-            <div class="section-label"><span>§02</span><b>Messages</b><i></i><em>3 Results</em></div>
-            <article class="result-row">
+            <div class="section-label"><span>§02</span><b>Workspace matches ‘fib’</b><i></i><em>3 Results</em></div>
+            <article class="result-row selected message-result">
               <b class="result-icon">"</b>
-              <div><h3>小酥 wrote: 41 次</h3><p>n=40 with <mark>memo</mark> only needs one value per n</p></div>
-              <span class="mono">14:03</span>
+              <div>
+                <h3>"<mark>fib</mark>.py · 5 行 · python"</h3>
+                <p>Workspace · current buffer</p>
+                <code>def <mark>fib</mark>(n): if n &lt; 2: return n...</code>
+              </div>
             </article>
-            <article class="result-row">
-              <b class="result-icon">/</b>
-              <div><h3>Open IDE with memo snippet</h3><p>command · paste optimized fib.py</p></div>
-              <span class="mono">⌘E</span>
+            <article class="result-row message-result">
+              <b class="result-icon">"</b>
+              <div>
+                <h3>"Review snapshot: <mark>fib</mark>.py"</h3>
+                <p>Journal · run evidence attached</p>
+                <code>memo hits: 38 · cache size: 41...</code>
+              </div>
+            </article>
+            <article class="result-row message-result">
+              <b class="result-icon">"</b>
+              <div>
+                <h3>"<mark>fib</mark>(40) 跑了 2.1 秒"</h3>
+                <p>Run output · previous execution</p>
+                <code>我加了一个 print 看了一下...</code>
+              </div>
+            </article>
+          </section>
+
+          <section class="result-group">
+            <div class="section-label"><span>§03</span><b>Actions</b><i></i><em>2 Results</em></div>
+            <article class="result-row person-result">
+              <span class="avatar">R</span>
+              <div><h3>Run current file</h3><p>Execute active Python or C++ buffer</p></div>
+              <button class="btn ghost compact" type="button">RUN</button>
+            </article>
+            <article class="result-row person-result">
+              <span class="avatar cyan">J</span>
+              <div><h3>Open journal</h3><p>Review notes, snapshots, and run evidence</p></div>
+              <button class="btn ghost compact" type="button">OPEN</button>
             </article>
           </section>
 
           <footer class="ask-ai-row">
-            <span class="avatar ai">AI<b>AI</b></span>
-            <p>Ask 小酥 to explain memo like a tiny notebook.</p>
+            <span class="avatar muted">AS</span>
+            <p>Future Assist is parked here until the behavior is reliable enough for daily use.</p>
             <span class="keycap">⌘↵</span>
-            <button class="btn accent" type="button">Ask 小酥</button>
+            <button class="btn accent" type="button" disabled>Reserved</button>
           </footer>
         </article>
       </div>
@@ -1544,49 +1589,65 @@
       <header class="masthead">
         <div class="mast-brand">
           <span class="brand-name">codeyo</span>
-          <span class="mono">Component Sheet / Editorial Lounge</span>
+          <span class="mono">Codeyo v0.1 · Reference Sheet · Nº 24</span>
         </div>
-        <div class="mast-actions"><span class="mono">12 Column Grid</span><span class="keycap">900H</span></div>
+        <div class="mast-actions"><span class="mono">11 Primitives · Lift Freely</span></div>
       </header>
 
       <main class="component-grid">
-        <article class="primitive span-4">
+        <article class="primitive span-6 type-primitive">
           <div class="section-label"><span>§01</span><b>Type Scale</b><i></i></div>
-          <h1>#作业互助</h1>
-          <h2>Dear plum,</h2>
-          <p>Serif carries warmth and messages.</p>
-          <span class="mono sample">Mono carries metadata</span>
+          <dl class="type-scale">
+            <dt>Serif / 64</dt><dd><h1>Workspace</h1></dd>
+            <dt>Serif / 32 italic</dt><dd><h2>Dear plum,</h2></dd>
+            <dt>Serif / 20</dt><dd><p>Body - quotes, message text.</p></dd>
+            <dt>Mono / 13 bold caps</dt><dd><span class="mono sample">Handle / kicker</span></dd>
+            <dt>Mono / 10.5 caps</dt><dd><span class="mono sample small">Section label</span></dd>
+          </dl>
         </article>
 
-        <article class="primitive span-4 palette-block">
+        <article class="primitive span-6 palette-block">
           <div class="section-label"><span>§02</span><b>Palette</b><i></i></div>
           <div class="swatches">
-            <span style="--sw:#F7F1E3">Paper</span>
-            <span style="--sw:#FCF8EE">Paper2</span>
-            <span style="--sw:#E8C547">Amber</span>
-            <span style="--sw:#D9CCFF">Lavender</span>
-            <span style="--sw:#FFC4A6">Peach</span>
-            <span style="--sw:#A6E0C2">Mint</span>
+            <span style="--sw:#F7F1E3">Aa <b>paper</b><small>#F7F1E3</small></span>
+            <span class="dark-swatch" style="--sw:#1A1A1A">Aa <b>ink</b><small>#1A1A1A</small></span>
+            <span style="--sw:#E8C547">Aa <b>amber</b><small>#E8C547</small></span>
+            <span style="--sw:#FAEAB5">Aa <b>amber soft</b><small>#FAEAB5</small></span>
+            <span style="--sw:#D9CCFF">Aa <b>lavender</b><small>#D9CCFF</small></span>
+            <span class="deep-swatch" style="--sw:#6E4BFF">Aa <b>lavender deep</b><small>#6E4BFF</small></span>
+            <span style="--sw:#FFC4A6">Aa <b>peach</b><small>#FFC4A6</small></span>
+            <span class="peach-swatch" style="--sw:#FF7A5C">Aa <b>peach deep</b><small>#FF7A5C</small></span>
           </div>
         </article>
 
-        <article class="primitive span-4">
+        <article class="primitive span-6 button-primitive">
           <div class="section-label"><span>§03</span><b>Buttons</b><i></i></div>
-          <div class="button-demo">
-            <button class="btn primary" type="button">Primary</button>
-            <button class="btn accent" type="button">Accent</button>
-            <button class="btn ghost" type="button">Ghost</button>
-            <button class="btn danger" type="button">Danger</button>
+          <div class="component-rows">
+            <span>Primary</span>
+            <div><button class="btn primary" type="button">Save</button><button class="btn primary" type="button">Send ↵</button><button class="btn primary" type="button">✦ Open IDE ⌘E</button></div>
+            <span>Accent</span>
+            <div><button class="btn accent" type="button">Join</button><button class="btn accent" type="button">Subscribe</button><button class="btn accent wide" type="button">Create Channel</button></div>
+            <span>Ghost</span>
+            <div><button class="btn ghost" type="button">Cancel</button><button class="btn ghost" type="button">··· More</button><button class="btn ghost" type="button">← Back</button></div>
+            <span>Danger</span>
+            <div><button class="btn danger" type="button">Delete</button><button class="btn danger" type="button">Leave Server</button></div>
           </div>
         </article>
 
-        <article class="primitive span-3">
+        <article class="primitive span-6 tags-primitive">
           <div class="section-label"><span>§04</span><b>Badges & Tags</b><i></i></div>
           <div class="tag-demo">
-            <span class="tag amber">Live Study</span>
-            <span class="tag lavender">AI Tutor</span>
-            <span class="tag peach">Mention</span>
+            <span class="tag lavender">Assist</span>
+            <span class="tag peach">Run</span>
+            <span class="tag amber">New</span>
             <span class="tag mint">Online</span>
+            <span class="tag peach">@ 3</span>
+            <span class="tag">Pinned</span>
+            <span class="tag">Beta</span>
+            <span class="keycap">⌘K</span>
+            <span class="keycap">⌘E</span>
+            <span class="keycap">↵</span>
+            <span class="keycap">Esc</span>
           </div>
         </article>
 
@@ -1599,7 +1660,7 @@
           <div class="section-label"><span>§06</span><b>Avatars</b><i></i></div>
           <div class="avatar-line">
             <span class="avatar large">PL</span>
-            <span class="avatar ai large">AI<b>AI</b></span>
+            <span class="avatar muted large">AS</span>
             <span class="avatar large">JY</span>
             <span class="avatar muted large">NO</span>
           </div>
@@ -1614,7 +1675,7 @@
         <article class="primitive span-5">
           <div class="section-label"><span>§08</span><b>Code Block</b><i></i></div>
           <div class="code-card ai-code">
-            <div class="code-head"><span>AI ✦</span><b>fib_memo.py · 5 L</b></div>
+            <div class="code-head"><span>Review</span><b>fib_memo.py · 5 L</b></div>
             <pre><code><b>01</b>@cache
 <b>02</b>def fib(n):
 <b>03</b>    if n &lt; 2: return n
@@ -1632,7 +1693,7 @@
 
         <article class="primitive span-3">
           <div class="section-label"><span>§10</span><b>Cards</b><i></i></div>
-          <div class="mini-live-card"><em></em><b>Live</b><span>递归室</span></div>
+          <div class="mini-live-card"><em></em><b>Run</b><span>递归室</span></div>
           <div class="mini-pin-card">“画出来就懂了。”</div>
         </article>
 
