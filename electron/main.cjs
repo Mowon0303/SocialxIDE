@@ -220,6 +220,7 @@ async function runStartupSmoke(window) {
   }, process.env.CODEYO_STARTUP_SMOKE_DEEP === '1' ? 30000 : 15000);
   try {
     await window.codeyoLoadPromise;
+    await waitForRendererSmoke(window);
     if (process.env.CODEYO_STARTUP_SMOKE_DEEP === '1') {
       await runStartupDeepSmoke();
     }
@@ -232,6 +233,34 @@ async function runStartupSmoke(window) {
     console.error(`CODEYO_STARTUP_SMOKE_FAILED: ${error?.message || error}`);
     app.exit(1);
   }
+}
+
+async function waitForRendererSmoke(window) {
+  const deadline = Date.now() + 10000;
+  let lastResult;
+  while (Date.now() < deadline) {
+    lastResult = await window.webContents.executeJavaScript(`
+      (() => {
+        const root = document.querySelector('app-root');
+        const shell = document.querySelector('.studio-shell');
+        const text = document.body?.innerText || '';
+        return {
+          hasRoot: Boolean(root),
+          hasShell: Boolean(shell),
+          hasWorkspace: text.includes('Codeyo Workspace'),
+          rootText: (root?.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
+          scriptCount: document.scripts.length,
+          title: document.title,
+          url: location.href
+        };
+      })()
+    `);
+    if (lastResult.hasShell && lastResult.hasWorkspace) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`Renderer did not render Angular shell: ${JSON.stringify(lastResult)}`);
 }
 
 async function runStartupDeepSmoke() {

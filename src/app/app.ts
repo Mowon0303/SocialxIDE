@@ -33,10 +33,12 @@ import {
   WorkspaceHandle,
 } from './desktop-api';
 
-type ScreenId = 'channels' | 'dm' | 'command' | 'components';
+type ScreenId = 'channels' | 'command';
 type ChannelView = 'thread' | 'ide';
 type RightPanel = 'contributors' | 'files' | 'git' | 'settings';
 type ConsolePanel = 'terminal' | 'problems' | 'output';
+type EditorDensity = 'compact' | 'comfortable';
+type RailResizeTarget = 'workspace' | 'explorer';
 type JournalKindFilter = 'all' | JournalEntry['kind'];
 type JournalWriteStatus = 'saved' | 'refresh-failed' | 'write-failed' | 'skipped';
 
@@ -99,22 +101,18 @@ interface ChannelItem {
   marker?: boolean;
 }
 
-interface DmThread {
+interface StoredChannelItem {
   id: string;
-  initials: string;
   name: string;
-  preview: string;
-  time: string;
-  title: string;
-  subtitle: string;
-  messages: {
-    author: string;
-    time: string;
-    body: string;
-    mine?: boolean;
-    quote?: string;
-    ps?: string;
-  }[];
+  topic?: unknown;
+  unread?: unknown;
+  mention?: unknown;
+  marker?: unknown;
+}
+
+interface StoredRailWidths {
+  workspace?: unknown;
+  explorer?: unknown;
 }
 
 interface LineComparison {
@@ -144,12 +142,23 @@ export class App implements OnInit, OnDestroy {
   readonly isDesktop = typeof window !== 'undefined' && Boolean(window.codeyo);
   focusedScreen: ScreenId | null = 'channels';
   activeChannelView: ChannelView = 'ide';
-  activeChannelId = 'homework';
-  activeDmId = 'plum';
+  activeChannelId = 'ide';
+  channelMenuOpen = false;
+  channelMenuChannelId = '';
+  channelMenuX = 0;
+  channelMenuY = 0;
+  channelDraftName = '';
+  channelMenuNotice = '';
+  channelDeleteArmed = false;
   activeRightPanel: RightPanel = 'files';
   activeConsolePanel: ConsolePanel = 'terminal';
+  editorDensity: EditorDensity = 'compact';
+  editorFontSizePx = 13;
+  workspaceRailWidth = 212;
+  explorerRailWidth = 206;
+  resizingRail: RailResizeTarget | null = null;
   activeIdePath = 'fib.py';
-  assistantPanelOpen = true;
+  assistantPanelOpen = false;
   assistantNotice = 'Assist slot is paused for v0.1. Use run output, diagnostics, Git, and journal entries for review.';
   lastSavedAt = '14:24';
   workspaceExpanded = true;
@@ -245,6 +254,23 @@ export class App implements OnInit, OnDestroy {
   commitReviewOpen = false;
   autoSaveEnabled = false;
   readonly autoSaveDelayMs = 1400;
+  private readonly channelStorageKey = 'codeyo.channels.v1';
+  private readonly editorDensityStorageKey = 'codeyo.editor-density.v1';
+  private readonly editorFontSizeStorageKey = 'codeyo.editor-font-size.v1';
+  readonly editorFontSizeMin = 12;
+  readonly editorFontSizeMax = 18;
+  private readonly editorFontSizeDefault = 13;
+  private readonly railWidthStorageKey = 'codeyo.rail-widths.v1';
+  private readonly railMinWidths: Record<RailResizeTarget, number> = {
+    workspace: 156,
+    explorer: 168,
+  };
+  private readonly railMaxWidths: Record<RailResizeTarget, number> = {
+    workspace: 380,
+    explorer: 360,
+  };
+  private readonly railCenterMinWidth = 420;
+  private railResizeBounds: { left: number; right: number; width: number } | null = null;
   private readonly recoveryTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly autoSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private removeFileChangeListener?: () => void;
@@ -255,164 +281,12 @@ export class App implements OnInit, OnDestroy {
     'done in 0.0002s',
   ];
 
-  readonly channels: ChannelItem[] = [
-    { id: 'homework', index: '01', name: 'Workspace', topic: 'local buffers · fib.py' },
-    { id: 'chat', index: '02', name: 'Run Logs', topic: 'terminal output · diagnostics', unread: 12 },
-    { id: 'intro', index: '03', name: 'Journal', topic: 'notes · decisions · handoff', unread: 1, mention: true },
-    { id: 'resources', index: '04', name: 'Snapshots', topic: 'review sets · run evidence' },
-    { id: 'bugs', index: '05', name: 'Problems', topic: 'debug desk · blockers', marker: true },
-  ];
-
-  readonly dmThreads: DmThread[] = [
-    {
-      id: 'plum',
-      initials: 'PL',
-      name: 'plum',
-      preview: 'memo 是不是就像一个答案小本子?',
-      time: '2m',
-      title: 'Dear plum,',
-      subtitle: '3 letters today · 47 letters all-time',
-      messages: [
-        {
-          author: 'you',
-          time: '今天 · 14:08',
-          mine: true,
-          body: '看了你贴的 fib - 那是个经典的“重复子问题”。每次 fib(n) 都会去算 fib(n-1) 和 fib(n-2), 而 fib(n-1) 又会再算 fib(n-2)... fib(n-3)...重复爆炸。',
-          ps: '你可以把递归树画出来感受一下, n=5 都已经有 15 个节点了。',
-        },
-        {
-          author: 'plum',
-          time: '今天 · 14:11',
-          body: '哦哦明白！所以 memo 就是把算过的存起来, 下次直接取?',
-        },
-        {
-          author: 'you',
-          time: '今天 · 14:12',
-          mine: true,
-          body: '就是这个。空间换时间 - 多用一个字典换来速度 1000 倍。',
-          ps: '一句话总结：能记住的别再算。',
-        },
-        {
-          author: 'plum',
-          time: '今天 · 14:14',
-          body: '谢谢救命之恩🍀 我去改了',
-        },
-      ],
-    },
-    {
-      id: 'review',
-      initials: 'RV',
-      name: 'Review Notes',
-      preview: 'Run evidence and snapshot notes are ready.',
-      time: '14m',
-      title: 'Dear review log,',
-      subtitle: 'Local notes keep run results and explanations together.',
-      messages: [
-        {
-          author: 'review log',
-          time: '14:19',
-          body: '把 fib 的解释保留成三步：先看重复子问题, 再加 cache, 最后用大输入验证。',
-        },
-        {
-          author: 'you',
-          time: '14:20',
-          mine: true,
-          body: '保持这个结构。等会儿把 run evidence 附到 review snapshot 里。',
-        },
-      ],
-    },
-    {
-      id: 'jay',
-      initials: 'JY',
-      name: 'jay',
-      preview: '库图发你了, 同关我们...',
-      time: '1h',
-      title: 'Dear jay,',
-      subtitle: '递归树草图和频道置顶建议。',
-      messages: [
-        {
-          author: 'jay',
-          time: '14:09',
-          body: '你看这张树图能不能放频道置顶? 左边展开, 右边 memo 后收束。',
-        },
-        {
-          author: 'you',
-          time: '14:12',
-          mine: true,
-          body: '可以, 先放到 Snapshots, 再在 Workspace 里引用。',
-        },
-      ],
-    },
-    {
-      id: 'kiwi',
-      initials: 'K',
-      name: 'kiwi',
-      preview: '直播结束！谢谢来听 ❤',
-      time: '3h',
-      title: 'Dear kiwi,',
-      subtitle: '直播排期和 React 片段。',
-      messages: [
-        {
-          author: 'kiwi',
-          time: '今天 · 13:42',
-          body: '直播结束！谢谢来听。我想把 memo 例子做成下次直播里的第一个片段。',
-        },
-        {
-          author: 'you',
-          time: '今天 · 13:47',
-          mine: true,
-          body: '可以, 我先把 IDE 里的 fib.py 保存成 review snapshot。',
-        },
-      ],
-    },
-    {
-      id: 'nori',
-      initials: 'N',
-      name: 'nori',
-      preview: '问包那个, 我重新写了',
-      time: 'YD',
-      title: 'Dear nori,',
-      subtitle: '重写记录和包管理笔记。',
-      messages: [
-        {
-          author: 'nori',
-          time: '昨天 · 18:04',
-          body: '问包那个, 我重新写了。现在 import 和 run profile 都清楚多了。',
-        },
-      ],
-    },
-    {
-      id: 'mochi',
-      initials: 'M',
-      name: 'mochi',
-      preview: '看到你的提交了, 干净',
-      time: 'YD',
-      title: 'Dear mochi,',
-      subtitle: '关于干净提交和 review snapshot。',
-      messages: [
-        {
-          author: 'mochi',
-          time: '昨天 · 16:10',
-          body: '看到你的提交了, 干净。那个 snapshot 对比特别适合给新人看。',
-        },
-      ],
-    },
-    {
-      id: 'tofu',
-      initials: 'T',
-      name: 'tofu',
-      preview: '《升鲸录》写好了 lol',
-      time: '2D',
-      title: 'Dear tofu,',
-      subtitle: '频道小报和周末片段。',
-      messages: [
-        {
-          author: 'tofu',
-          time: '周二 · 21:30',
-          body: '《升鲸录》写好了 lol。等你把 component sheet 也放进去。',
-        },
-      ],
-    },
+  channels: ChannelItem[] = [
+    { id: 'ide', index: '01', name: 'IDE Workspace', topic: 'local buffers · fib.py' },
+    { id: 'run-log', index: '02', name: 'Run Logs', topic: 'terminal output · diagnostics', unread: 12 },
+    { id: 'journal', index: '03', name: 'Journal', topic: 'notes · decisions · handoff', unread: 1, mention: true },
+    { id: 'snapshots', index: '04', name: 'Snapshots', topic: 'review sets · run evidence' },
+    { id: 'problems', index: '05', name: 'Problems', topic: 'debug desk · blockers', marker: true },
   ];
 
   readonly ideFiles: IdeFile[] = [
@@ -467,9 +341,14 @@ export class App implements OnInit, OnDestroy {
     },
   ];
 
-  constructor(private readonly changeDetector: ChangeDetectorRef) {}
+  constructor(private readonly changeDetector: ChangeDetectorRef) {
+    this.loadStoredEditorDensity();
+    this.loadStoredEditorFontSize();
+    this.loadStoredRailWidths();
+  }
 
   ngOnInit(): void {
+    this.loadStoredChannels();
     this.rebuildExplorerTree();
     if (this.isDesktop) {
       this.removeFileChangeListener = window.codeyo?.files.onChanged((change) => {
@@ -919,8 +798,17 @@ export class App implements OnInit, OnDestroy {
     return this.channels.find((channel) => channel.id === this.activeChannelId) ?? this.channels[0];
   }
 
-  get activeDmThread(): DmThread {
-    return this.dmThreads.find((thread) => thread.id === this.activeDmId) ?? this.dmThreads[0];
+  get contextChannel(): ChannelItem | undefined {
+    return this.channels.find((channel) => channel.id === this.channelMenuChannelId);
+  }
+
+  get editorLineHeightPx(): number {
+    const ratio = this.editorDensity === 'compact' ? 1.54 : 1.68;
+    return Math.round(this.editorFontSizePx * ratio);
+  }
+
+  get editorVerticalPaddingPx(): number {
+    return this.editorDensity === 'compact' ? 8 : 12;
   }
 
   focusScreen(screen: ScreenId): void {
@@ -942,29 +830,367 @@ export class App implements OnInit, OnDestroy {
     event.returnValue = 'Codeyo has unsaved workspace buffers.';
   }
 
+  @HostListener('document:click')
+  closeChannelMenu(): void {
+    if (!this.channelMenuOpen) {
+      return;
+    }
+    this.channelMenuOpen = false;
+    this.channelMenuNotice = '';
+    this.channelDeleteArmed = false;
+  }
+
+  @HostListener('window:keydown.escape')
+  closeChannelMenuFromEscape(): void {
+    this.closeChannelMenu();
+  }
+
+  @HostListener('window:mousemove', ['$event'])
+  resizeRailFromMouseMove(event: MouseEvent): void {
+    if (!this.resizingRail) {
+      return;
+    }
+    event.preventDefault();
+    this.updateRailWidthFromPointer(event.clientX);
+  }
+
+  @HostListener('window:mouseup')
+  finishRailResize(): void {
+    if (!this.resizingRail) {
+      return;
+    }
+    this.resizingRail = null;
+    this.railResizeBounds = null;
+    this.saveRailWidths();
+  }
+
+  @HostListener('window:blur')
+  cancelRailResize(): void {
+    this.finishRailResize();
+  }
+
   openIde(): void {
+    this.activeChannelId = 'ide';
     this.activeChannelView = 'ide';
     this.activeRightPanel = 'files';
   }
 
   setChannelView(view: ChannelView): void {
+    if (view === 'ide') {
+      this.activeChannelId = 'ide';
+    } else if (this.activeChannelId === 'ide') {
+      this.activeChannelId = this.firstThreadChannelId();
+    }
     this.activeChannelView = view;
     this.activeRightPanel = view === 'ide' ? 'files' : 'contributors';
   }
 
   selectChannel(channelId: string): void {
-    this.activeChannelId = channelId;
-    this.activeChannelView = 'thread';
-    this.activeRightPanel = 'contributors';
+    this.activateChannel(channelId);
   }
 
-  openDm(threadId = this.activeDmId): void {
-    this.activeDmId = threadId;
-    this.focusScreen('dm');
+  openChannelMenu(event: MouseEvent, channelId: string): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.channelMenuChannelId = channelId;
+    this.channelDraftName = '';
+    this.channelDeleteArmed = false;
+    this.channelMenuNotice = '';
+    this.channelMenuOpen = true;
+    const menuWidth = 236;
+    const menuHeight = 196;
+    const viewportWidth = typeof window === 'undefined' ? 1440 : window.innerWidth;
+    const viewportHeight = typeof window === 'undefined' ? 900 : window.innerHeight;
+    this.channelMenuX = Math.max(8, Math.min(event.clientX, viewportWidth - menuWidth - 8));
+    this.channelMenuY = Math.max(8, Math.min(event.clientY, viewportHeight - menuHeight - 8));
   }
 
-  selectDm(threadId: string): void {
-    this.activeDmId = threadId;
+  openChannelSectionMenu(event: MouseEvent): void {
+    this.openChannelMenu(event, this.firstThreadChannelId());
+  }
+
+  startRailResize(event: MouseEvent, target: RailResizeTarget): void {
+    event.preventDefault();
+    event.stopPropagation();
+    const layout = (event.currentTarget as HTMLElement | null)?.closest('.channels-layout');
+    const rect = layout?.getBoundingClientRect();
+    if (!rect) {
+      return;
+    }
+    this.resizingRail = target;
+    this.railResizeBounds = {
+      left: rect.left,
+      right: rect.right,
+      width: rect.width,
+    };
+    this.updateRailWidthFromPointer(event.clientX);
+  }
+
+  updateChannelDraftName(event: Event): void {
+    this.channelDraftName = (event.target as HTMLInputElement).value;
+    this.channelDeleteArmed = false;
+  }
+
+  createChannelFromMenu(): void {
+    const name = this.normalizeChannelName(this.channelDraftName);
+    if (!name) {
+      this.channelMenuNotice = 'NAME REQUIRED';
+      return;
+    }
+    const channel: ChannelItem = {
+      id: this.uniqueChannelId(name),
+      index: '',
+      name,
+      topic: 'user channel',
+    };
+    const contextIndex = this.channels.findIndex((candidate) => candidate.id === this.channelMenuChannelId);
+    const insertAt = contextIndex >= 0 ? contextIndex + 1 : this.channels.length;
+    this.channels.splice(insertAt, 0, channel);
+    this.renumberChannels();
+    this.saveChannels();
+    this.channelMenuChannelId = channel.id;
+    this.channelDraftName = '';
+    this.channelMenuNotice = `CREATED · ${channel.name}`;
+    this.channelDeleteArmed = false;
+    this.selectChannel(channel.id);
+  }
+
+  deleteContextChannel(): void {
+    const channel = this.contextChannel;
+    if (!channel || channel.id === 'ide') {
+      this.channelMenuNotice = 'WORKSPACE NODE CANNOT BE DELETED';
+      return;
+    }
+    if (!this.channelDeleteArmed) {
+      this.channelDeleteArmed = true;
+      this.channelMenuNotice = `CONFIRM DELETE · ${channel.name}`;
+      return;
+    }
+    const deletedId = channel.id;
+    this.channels = this.channels.filter((candidate) => candidate.id !== deletedId);
+    this.renumberChannels();
+    this.saveChannels();
+    if (this.activeChannelId === deletedId) {
+      this.selectChannel(this.firstThreadChannelId());
+    }
+    this.closeChannelMenu();
+  }
+
+  private activateChannel(channelId: string): void {
+    const nextId = this.channels.some((channel) => channel.id === channelId)
+      ? channelId
+      : this.firstThreadChannelId();
+    this.activeChannelId = nextId;
+    this.activeChannelView = nextId === 'ide' ? 'ide' : 'thread';
+    this.activeRightPanel = nextId === 'ide' ? 'files' : 'contributors';
+  }
+
+  private firstThreadChannelId(): string {
+    return this.channels.find((channel) => channel.id !== 'ide')?.id ?? 'ide';
+  }
+
+  private normalizeChannelName(value: string): string {
+    return value.trim().replace(/\s+/g, ' ').slice(0, 24);
+  }
+
+  private uniqueChannelId(name: string): string {
+    const base = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'channel';
+    let candidate = base;
+    let suffix = 2;
+    while (this.channels.some((channel) => channel.id === candidate)) {
+      candidate = `${base}-${suffix}`;
+      suffix += 1;
+    }
+    return candidate;
+  }
+
+  private renumberChannels(): void {
+    this.channels.forEach((channel, index) => {
+      channel.index = String(index + 1).padStart(2, '0');
+    });
+  }
+
+  private loadStoredChannels(): void {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+    try {
+      const stored = localStorage.getItem(this.channelStorageKey);
+      if (!stored) {
+        return;
+      }
+      const parsed = JSON.parse(stored);
+      if (!Array.isArray(parsed)) {
+        return;
+      }
+      const ideChannel = this.channels.find((channel) => channel.id === 'ide') ?? {
+        id: 'ide',
+        index: '01',
+        name: 'IDE Workspace',
+        topic: 'local buffers',
+      };
+      const restored = parsed
+        .filter((channel): channel is StoredChannelItem =>
+          Boolean(channel && typeof channel === 'object')
+          && typeof channel.id === 'string'
+          && channel.id !== 'ide'
+          && typeof channel.name === 'string')
+        .map((channel) => ({
+          id: channel.id.slice(0, 48),
+          index: '',
+          name: this.normalizeChannelName(channel.name) || 'Channel',
+          topic: typeof channel.topic === 'string' ? channel.topic.slice(0, 80) : 'user channel',
+          unread: typeof channel.unread === 'number' ? Math.max(0, Math.min(99, Math.floor(channel.unread))) : undefined,
+          mention: channel.mention === true || undefined,
+          marker: channel.marker === true || undefined,
+        }));
+      this.channels = [ideChannel, ...restored];
+      this.renumberChannels();
+    } catch {
+      // Channel settings are convenience state; the workspace stays usable if storage is unavailable.
+    }
+  }
+
+  private saveChannels(): void {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+    try {
+      localStorage.setItem(this.channelStorageKey, JSON.stringify(this.channels));
+    } catch {
+      // Ignore storage quota or privacy-mode failures.
+    }
+  }
+
+  private loadStoredEditorDensity(): void {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+    try {
+      const stored = localStorage.getItem(this.editorDensityStorageKey);
+      if (stored === 'compact' || stored === 'comfortable') {
+        this.editorDensity = stored;
+      }
+    } catch {
+      // Density is presentation state; keep the default if storage is unavailable.
+    }
+  }
+
+  private saveEditorDensity(): void {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+    try {
+      localStorage.setItem(this.editorDensityStorageKey, this.editorDensity);
+    } catch {
+      // Ignore storage quota or privacy-mode failures.
+    }
+  }
+
+  private loadStoredEditorFontSize(): void {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+    try {
+      const stored = localStorage.getItem(this.editorFontSizeStorageKey);
+      if (!stored) {
+        return;
+      }
+      this.editorFontSizePx = this.clampEditorFontSize(Number(stored));
+    } catch {
+      // Font size is presentation state; keep the default if storage is unavailable.
+    }
+  }
+
+  private saveEditorFontSize(): void {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+    try {
+      localStorage.setItem(this.editorFontSizeStorageKey, String(this.editorFontSizePx));
+    } catch {
+      // Ignore storage quota or privacy-mode failures.
+    }
+  }
+
+  private loadStoredRailWidths(): void {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+    try {
+      const stored = localStorage.getItem(this.railWidthStorageKey);
+      if (!stored) {
+        return;
+      }
+      const parsed = JSON.parse(stored) as StoredRailWidths;
+      if (typeof parsed?.workspace === 'number') {
+        this.workspaceRailWidth = this.clampRailWidth('workspace', parsed.workspace);
+      }
+      if (typeof parsed?.explorer === 'number') {
+        this.explorerRailWidth = this.clampRailWidth('explorer', parsed.explorer);
+      }
+    } catch {
+      // Rail widths are presentation state; keep defaults if storage is unavailable.
+    }
+  }
+
+  private saveRailWidths(): void {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+    try {
+      localStorage.setItem(this.railWidthStorageKey, JSON.stringify({
+        workspace: this.workspaceRailWidth,
+        explorer: this.explorerRailWidth,
+      }));
+    } catch {
+      // Ignore storage quota or privacy-mode failures.
+    }
+  }
+
+  private updateRailWidthFromPointer(clientX: number): void {
+    if (!this.resizingRail || !this.railResizeBounds) {
+      return;
+    }
+    if (this.resizingRail === 'workspace') {
+      this.workspaceRailWidth = this.clampRailWidth(
+        'workspace',
+        clientX - this.railResizeBounds.left,
+        this.railResizeBounds.width,
+      );
+      return;
+    }
+    this.explorerRailWidth = this.clampRailWidth(
+      'explorer',
+      this.railResizeBounds.right - clientX,
+      this.railResizeBounds.width,
+    );
+  }
+
+  private clampRailWidth(
+    target: RailResizeTarget,
+    value: number,
+    layoutWidth = Number.POSITIVE_INFINITY,
+  ): number {
+    const minWidth = this.railMinWidths[target];
+    const hardMaxWidth = this.railMaxWidths[target];
+    const otherRailWidth = target === 'workspace' ? this.explorerRailWidth : this.workspaceRailWidth;
+    const layoutMaxWidth = Number.isFinite(layoutWidth)
+      ? Math.max(minWidth, layoutWidth - otherRailWidth - this.railCenterMinWidth)
+      : hardMaxWidth;
+    const maxWidth = Math.max(minWidth, Math.min(hardMaxWidth, layoutMaxWidth));
+    return Math.round(Math.min(Math.max(value, minWidth), maxWidth));
+  }
+
+  private clampEditorFontSize(value: number): number {
+    if (!Number.isFinite(value)) {
+      return this.editorFontSizeDefault;
+    }
+    const rounded = Math.round(value * 2) / 2;
+    return Math.min(Math.max(rounded, this.editorFontSizeMin), this.editorFontSizeMax);
   }
 
   setRightPanel(panel: RightPanel): void {
@@ -974,6 +1200,7 @@ export class App implements OnInit, OnDestroy {
   selectIdeFile(path: string): void {
     this.clearGitComparison();
     this.activeIdePath = path;
+    this.activeChannelId = 'ide';
     this.activeChannelView = 'ide';
     this.activeRightPanel = 'files';
     if (this.isDesktop && this.workspace && this.activeIdeFile.workspaceFile) {
@@ -1001,8 +1228,7 @@ export class App implements OnInit, OnDestroy {
       0,
       this.quickOpenResults.findIndex((file) => file.path === this.activeIdePath),
     );
-    this.activeChannelView = 'ide';
-    this.activeRightPanel = 'files';
+    this.openIde();
   }
 
   closeQuickOpen(): void {
@@ -1211,6 +1437,28 @@ export class App implements OnInit, OnDestroy {
     this.activeConsolePanel = panel;
   }
 
+  setEditorDensity(density: EditorDensity): void {
+    this.editorDensity = density;
+    this.saveEditorDensity();
+  }
+
+  updateEditorFontSize(event: Event): void {
+    this.setEditorFontSize(Number((event.target as HTMLInputElement).value));
+  }
+
+  stepEditorFontSize(delta: number): void {
+    this.setEditorFontSize(this.editorFontSizePx + delta);
+  }
+
+  resetEditorFontSize(): void {
+    this.setEditorFontSize(this.editorFontSizeDefault);
+  }
+
+  setEditorFontSize(value: number): void {
+    this.editorFontSizePx = this.clampEditorFontSize(value);
+    this.saveEditorFontSize();
+  }
+
   toggleAutoSave(): void {
     this.setAutoSave(!this.autoSaveEnabled);
   }
@@ -1238,6 +1486,7 @@ export class App implements OnInit, OnDestroy {
       return;
     }
     this.activeIdePath = file.path;
+    this.activeChannelId = 'ide';
     this.activeChannelView = 'ide';
     this.activeRightPanel = 'files';
     if (this.isDesktop && this.workspace && file.workspaceFile && file.status === 'saved') {
@@ -1594,8 +1843,7 @@ export class App implements OnInit, OnDestroy {
       kind: 'run',
     });
     this.runShared = true;
-    this.activeChannelView = 'thread';
-    this.activeRightPanel = 'contributors';
+    this.selectChannel('run-log');
   }
 
   requestPeerReview(): void {
@@ -1610,8 +1858,7 @@ export class App implements OnInit, OnDestroy {
       time: this.currentTime(),
       kind: 'review',
     });
-    this.activeChannelView = 'thread';
-    this.activeRightPanel = 'contributors';
+    this.selectChannel('snapshots');
   }
 
   openSharedBuffer(path: string): void {
@@ -2228,6 +2475,7 @@ export class App implements OnInit, OnDestroy {
     }
     this.gitCompareBusy = true;
     this.assistantPanelOpen = false;
+    this.activeChannelId = 'ide';
     this.activeChannelView = 'ide';
     this.activeRightPanel = 'git';
     this.gitHistoryDetail = null;
@@ -2394,8 +2642,7 @@ export class App implements OnInit, OnDestroy {
       this.workspaceNotice = `SAVED ${scope === 'commit' ? 'REVIEW SET' : 'REVIEW SNAPSHOT'} · COMMIT ${this.gitHistoryDetail.shortRevision} · ${files.length} FILES${skipped > 0 ? ` · ${skipped} SKIPPED` : ''}${journalRefreshed ? '' : ' · JOURNAL REFRESH FAILED'}`;
       this.reviewSnapshotDraft = '';
       this.selectedReviewRunResultId = '';
-      this.activeChannelView = 'thread';
-      this.activeRightPanel = 'contributors';
+      this.selectChannel('snapshots');
     } catch (error) {
       this.workspaceNotice = this.desktopError(error, 'COULD NOT SAVE REVIEW SNAPSHOT');
     } finally {
@@ -2442,6 +2689,7 @@ export class App implements OnInit, OnDestroy {
     }
     this.gitCompareBusy = true;
     this.assistantPanelOpen = false;
+    this.activeChannelId = 'ide';
     this.activeChannelView = 'ide';
     this.activeRightPanel = 'git';
     try {
@@ -2752,6 +3000,7 @@ export class App implements OnInit, OnDestroy {
     file.lines = buffer.content.split('\n');
     file.status = 'edited';
     this.activeIdePath = file.path;
+    this.activeChannelId = 'ide';
     this.activeChannelView = 'ide';
     this.activeRightPanel = 'files';
     this.clearGitComparison();
@@ -3622,6 +3871,7 @@ export class App implements OnInit, OnDestroy {
     this.lastRunTarget = result.entryFile;
     this.lastRunSummary = `EXIT ${result.exitCode} · ${result.elapsedMs} MS`;
     this.workspaceNotice = `RUN EVIDENCE OPENED · ${result.entryFile} · ${this.lastRunSummary}`;
+    this.activeChannelId = 'ide';
     this.activeChannelView = 'ide';
     this.activeRightPanel = 'files';
     this.activeConsolePanel = result.diagnostics.length > 0 ? 'problems' : 'output';
@@ -3661,8 +3911,7 @@ export class App implements OnInit, OnDestroy {
       if (!journalRefreshed) {
         this.workspaceNotice += ' · JOURNAL REFRESH FAILED';
       }
-      this.activeChannelView = 'thread';
-      this.activeRightPanel = 'contributors';
+      this.selectChannel('snapshots');
     } catch (error) {
       this.workspaceNotice = this.desktopError(error, 'COULD NOT SAVE REVIEW SNAPSHOT');
     } finally {
@@ -3684,8 +3933,7 @@ export class App implements OnInit, OnDestroy {
       return;
     }
     this.workspaceNotice = `SHARED RUN SAVED${this.journalWriteSuffix(result)}`;
-    this.activeChannelView = 'thread';
-    this.activeRightPanel = 'contributors';
+    this.selectChannel('run-log');
     this.renderDesktopState();
   }
 
@@ -3718,6 +3966,7 @@ export class App implements OnInit, OnDestroy {
       this.snapshotDiagnosticRevealColumn = 1;
       this.snapshotDiagnosticRevealRequest = 0;
       this.snapshotCompareOpen = false;
+      this.selectChannel('snapshots');
       await this.loadSnapshotCurrentContent();
     } catch (error) {
       this.closeSnapshot();
@@ -3769,6 +4018,7 @@ export class App implements OnInit, OnDestroy {
     this.lastRunSummary = `EXIT ${result.exitCode} · ${result.elapsedMs} MS`;
     this.workspaceNotice = `CAPTURED RUN OPENED · ${result.entryFile} · ${this.lastRunSummary}`;
     this.closeSnapshot();
+    this.activeChannelId = 'ide';
     this.activeChannelView = 'ide';
     this.activeRightPanel = 'files';
     this.activeConsolePanel = 'terminal';
@@ -3840,6 +4090,7 @@ export class App implements OnInit, OnDestroy {
     this.snapshotRunResult = null;
     this.snapshotEvidenceOpen = false;
     this.snapshotCompareOpen = false;
+    this.activeChannelId = 'ide';
     this.activeChannelView = 'ide';
     this.activeRightPanel = 'files';
     this.renderDesktopState();
@@ -3859,6 +4110,7 @@ export class App implements OnInit, OnDestroy {
     this.snapshotActivePath = '';
     this.snapshotRunResult = null;
     this.snapshotEvidenceOpen = false;
+    this.activeChannelId = 'ide';
     this.activeChannelView = 'ide';
   }
 

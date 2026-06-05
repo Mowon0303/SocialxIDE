@@ -14,9 +14,11 @@ import {
 import { basicSetup } from 'codemirror';
 import { cpp } from '@codemirror/lang-cpp';
 import { python } from '@codemirror/lang-python';
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { Diagnostic, setDiagnostics } from '@codemirror/lint';
 import { Compartment, EditorState, Extension } from '@codemirror/state';
 import { Decoration, EditorView } from '@codemirror/view';
+import { tags } from '@lezer/highlight';
 import { EditorDiagnostic, EditorLanguage } from './desktop-api';
 
 @Component({
@@ -59,6 +61,7 @@ export class CodeEditorComponent implements AfterViewInit, OnChanges, OnDestroy 
           this.languageCompartment.of(this.languageExtension()),
           this.readOnlyCompartment.of(this.readOnlyExtensions()),
           this.diffCompartment.of(this.diffExtension()),
+          syntaxHighlighting(editorialHighlightStyle),
           editorialEditorTheme,
           EditorView.updateListener.of((update) => {
             if (update.docChanged && !this.applyingExternalChange) {
@@ -176,33 +179,57 @@ const editorialEditorTheme = EditorView.theme({
   '&': {
     height: '100%',
     backgroundColor: '#1a1a1a',
-    color: '#faeab5',
+    color: '#fff1bf',
     fontFamily: '"JetBrains Mono", monospace',
-    fontSize: '13.5px',
+    fontSize: 'var(--codeyo-editor-font-size, 13.5px)',
   },
   '.cm-scroller': {
     overflow: 'auto',
-    lineHeight: '1.72',
+    lineHeight: 'var(--codeyo-editor-line-height, 21px)',
   },
   '.cm-content': {
     caretColor: '#e8c547',
-    padding: '14px 0',
+    padding: 'var(--codeyo-editor-y-padding, 9px) 0',
   },
   '.cm-line': {
-    paddingLeft: '16px',
+    lineHeight: 'var(--codeyo-editor-line-height, 21px)',
+    minHeight: 'var(--codeyo-editor-line-height, 21px)',
+    paddingLeft: '7px',
   },
   '.cm-gutters': {
-    backgroundColor: '#141414',
-    borderRight: '1.5px solid #b89a2c',
-    color: '#b89a2c',
-    paddingTop: '14px',
+    backgroundColor: '#111111',
+    borderRight: '1px solid rgba(232, 197, 71, 0.82)',
+    color: '#d8bd4b',
+    paddingTop: '0',
+  },
+  '.cm-gutterElement': {
+    lineHeight: 'var(--codeyo-editor-line-height, 21px)',
   },
   '.cm-lineNumbers .cm-gutterElement': {
-    padding: '0 15px 0 16px',
+    alignItems: 'center',
+    boxSizing: 'border-box',
+    display: 'flex',
     fontWeight: '800',
+    justifyContent: 'flex-end',
+    minWidth: '18px',
+    padding: '0 2px 0 3px',
+    textAlign: 'right',
+  },
+  '.cm-lineNumbers .cm-gutterElement:not([style*="height: 0px"])': {
+    minHeight: 'var(--codeyo-editor-line-height, 21px)',
+  },
+  '.cm-foldGutter .cm-gutterElement': {
+    boxSizing: 'border-box',
+    color: '#d8bd4b',
+    minWidth: '8px',
+    padding: '0 1px',
+    width: '8px',
+  },
+  '.cm-foldGutter .cm-gutterElement:not([style*="height: 0px"])': {
+    minHeight: 'var(--codeyo-editor-line-height, 21px)',
   },
   '.cm-activeLine, .cm-activeLineGutter': {
-    backgroundColor: 'rgba(232, 197, 71, 0.09)',
+    backgroundColor: 'rgba(255, 229, 142, 0.12)',
   },
   '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
     backgroundColor: '#e8c547 !important',
@@ -237,3 +264,43 @@ const editorialEditorTheme = EditorView.theme({
     textTransform: 'uppercase',
   },
 });
+
+const editorialHighlightStyle = HighlightStyle.define([
+  {
+    tag: [tags.keyword, tags.controlKeyword, tags.definitionKeyword, tags.moduleKeyword],
+    color: '#ff73d7',
+    fontWeight: '800',
+  },
+  {
+    tag: [tags.definition(tags.variableName), tags.function(tags.variableName), tags.function(tags.propertyName)],
+    color: '#4ea5ff',
+    fontWeight: '800',
+  },
+  {
+    tag: [tags.variableName, tags.propertyName, tags.name],
+    color: '#fff1bf',
+  },
+  {
+    tag: [tags.string, tags.character, tags.attributeValue],
+    color: '#ff766c',
+  },
+  {
+    tag: [tags.number, tags.integer, tags.float, tags.bool],
+    color: '#45d08d',
+    fontWeight: '800',
+  },
+  {
+    tag: [tags.operator, tags.operatorKeyword, tags.punctuation, tags.bracket],
+    color: '#ffe18e',
+  },
+  {
+    tag: [tags.meta, tags.comment],
+    color: '#9de07f',
+    fontStyle: 'normal',
+  },
+  {
+    tag: tags.invalid,
+    color: '#ffb39c',
+    textDecoration: 'underline',
+  },
+]);

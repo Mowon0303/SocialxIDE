@@ -316,35 +316,143 @@ describe('App', () => {
     expect(compiled.querySelector('.cm-editor')).toBeTruthy();
   });
 
-  it('should toggle the floating assist slot', () => {
+  it('should keep the assist slot hidden by default and toggle it open', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.ide-inspector')).toBeTruthy();
-
-    (fixture.nativeElement.querySelector('.panel-toggle') as HTMLButtonElement).click();
-    fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.ide-inspector')).toBeFalsy();
+    expect(fixture.nativeElement.querySelector('.assist-toggle')?.textContent).toContain('Show Assist');
+
+    (fixture.nativeElement.querySelector('.assist-toggle') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.ide-inspector')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.assist-toggle')?.textContent).toContain('Hide Assist');
   });
 
-  it('should switch channels and direct messages from the shell navigation', async () => {
+  it('should apply and persist the editor density class', () => {
+    const firstFixture = TestBed.createComponent(App);
+    firstFixture.componentInstance.setEditorDensity('comfortable');
+    expect(localStorage.getItem('codeyo.editor-density.v1')).toBe('comfortable');
+    firstFixture.destroy();
+
+    const secondFixture = TestBed.createComponent(App);
+    secondFixture.detectChanges();
+
+    const shell = secondFixture.nativeElement.querySelector('.studio-shell') as HTMLElement;
+    expect(shell.classList.contains('density-comfortable')).toBe(true);
+    expect(shell.classList.contains('density-compact')).toBe(false);
+  });
+
+  it('should apply and persist the editor font size setting', () => {
+    const firstFixture = TestBed.createComponent(App);
+    firstFixture.componentInstance.setEditorFontSize(15.25);
+    expect(firstFixture.componentInstance.editorFontSizePx).toBe(15.5);
+    expect(localStorage.getItem('codeyo.editor-font-size.v1')).toBe('15.5');
+    firstFixture.destroy();
+
+    const secondFixture = TestBed.createComponent(App);
+    secondFixture.detectChanges();
+
+    const app = secondFixture.componentInstance;
+    const shell = secondFixture.nativeElement.querySelector('.studio-shell') as HTMLElement;
+    expect(app.editorFontSizePx).toBe(15.5);
+    expect(shell.style.getPropertyValue('--codeyo-editor-font-size')).toBe('15.5px');
+    expect(shell.style.getPropertyValue('--codeyo-editor-line-height')).toBe('24px');
+  });
+
+  it('should resize and persist the workspace and explorer rails', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    const layout = fixture.nativeElement.querySelector('.channels-layout') as HTMLElement;
+    Object.defineProperty(layout, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({
+        x: 0,
+        y: 0,
+        width: 1000,
+        height: 600,
+        top: 0,
+        right: 1000,
+        bottom: 600,
+        left: 0,
+        toJSON: () => ({}),
+      }),
+    });
+
+    const workspaceHandle = fixture.nativeElement.querySelector('.workspace-resizer') as HTMLButtonElement;
+    workspaceHandle.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 260,
+    }));
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 280 }));
+    window.dispatchEvent(new MouseEvent('mouseup'));
+
+    expect(app.workspaceRailWidth).toBe(280);
+    expect(app.resizingRail).toBeNull();
+
+    const explorerHandle = fixture.nativeElement.querySelector('.explorer-resizer') as HTMLButtonElement;
+    explorerHandle.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 760,
+    }));
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 730 }));
+    window.dispatchEvent(new MouseEvent('mouseup'));
+
+    expect(app.explorerRailWidth).toBe(270);
+    expect(JSON.parse(localStorage.getItem('codeyo.rail-widths.v1') ?? '{}')).toEqual({
+      workspace: 280,
+      explorer: 270,
+    });
+
+    fixture.destroy();
+    const restoredFixture = TestBed.createComponent(App);
+    expect(restoredFixture.componentInstance.workspaceRailWidth).toBe(280);
+    expect(restoredFixture.componentInstance.explorerRailWidth).toBe(270);
+  });
+
+  it('should switch workspace sections from the shell navigation', async () => {
     const channelFixture = TestBed.createComponent(App);
     const channelApp = channelFixture.componentInstance;
-    channelApp.selectChannel('resources');
+    channelApp.selectChannel('snapshots');
     channelFixture.detectChanges();
     await channelFixture.whenStable();
-    expect(channelApp.activeChannelId).toBe('resources');
+    expect(channelApp.activeChannelId).toBe('snapshots');
     expect(channelApp.activeChannelView).toBe('thread');
-    expect(channelFixture.nativeElement.querySelector('.workspace-tabs span')?.textContent).toContain('Snapshots');
+    expect(channelApp.activeChannel.name).toBe('Snapshots');
+    expect(channelFixture.nativeElement.querySelector('.workspace-tabs')).toBeNull();
+  });
 
-    const dmFixture = TestBed.createComponent(App);
-    const dmApp = dmFixture.componentInstance;
-    dmApp.openDm('jay');
-    dmFixture.detectChanges();
-    await dmFixture.whenStable();
-    expect(dmApp.focusedScreen).toBe('dm');
-    expect(dmApp.activeDmThread.name).toBe('jay');
-    expect(dmFixture.nativeElement.querySelector('.letter-head h1')?.textContent).toContain('jay');
-    expect(dmFixture.nativeElement.querySelector('.letter-stream')?.textContent).toContain('树图');
+  it('should create and delete channels from the channel context menu', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    const channelButtons = Array.from(fixture.nativeElement.querySelectorAll('.channel')) as HTMLButtonElement[];
+    const runLogButton = channelButtons.find((button) => button.textContent?.includes('Run Logs'));
+
+    runLogButton?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 120,
+      clientY: 220,
+    }));
+    fixture.detectChanges();
+
+    expect(app.channelMenuOpen).toBe(true);
+    expect(fixture.nativeElement.querySelector('.channel-menu')).toBeTruthy();
+
+    app.channelDraftName = 'Voice';
+    app.createChannelFromMenu();
+    expect(app.channels.map((channel) => channel.name)).toContain('Voice');
+    expect(app.activeChannel.name).toBe('Voice');
+    expect(app.channels.map((channel) => channel.index)).toEqual(['01', '02', '03', '04', '05', '06']);
+
+    app.deleteContextChannel();
+    expect(app.channelDeleteArmed).toBe(true);
+    app.deleteContextChannel();
+    expect(app.channels.map((channel) => channel.name)).not.toContain('Voice');
+    expect(app.channels.map((channel) => channel.index)).toEqual(['01', '02', '03', '04', '05']);
   });
 
   it('should create and remove an editable buffer', () => {
@@ -2689,6 +2797,8 @@ describe('App', () => {
     fixture.detectChanges();
     const settings = fixture.nativeElement.querySelector('.settings-panel') as HTMLElement;
     expect(settings.textContent).toContain('Project Settings');
+    expect(settings.textContent).toContain('Editor Density');
+    expect(settings.textContent).toContain('Font Size');
     expect(settings.textContent).toContain('Toolchain');
     expect(settings.textContent).toContain('Safety');
     expect(settings.textContent).toContain('Auto Save');

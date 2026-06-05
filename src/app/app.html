@@ -1,38 +1,58 @@
-<div class="studio-shell" [class.is-focused]="focusedScreen !== null">
-  <header class="studio-nav" [class.dm-mode]="focusedScreen === 'dm'">
-    @if (focusedScreen === 'dm') {
-      <div class="studio-brand dm-nav-brand">
-        <strong>codeyo</strong>
-        <span class="studio-divider"></span>
-        <span>Correspondence</span>
-      </div>
+<div
+  class="studio-shell"
+  [class.is-focused]="focusedScreen !== null"
+  [class.density-compact]="editorDensity === 'compact'"
+  [class.density-comfortable]="editorDensity === 'comfortable'"
+  [class.is-resizing-rail]="resizingRail !== null"
+  [style.--codeyo-editor-font-size]="editorFontSizePx + 'px'"
+  [style.--codeyo-editor-line-height]="editorLineHeightPx + 'px'"
+  [style.--codeyo-editor-y-padding]="editorVerticalPaddingPx + 'px'"
+>
+  <header class="studio-nav">
+    <div class="studio-brand">
+      <strong>Codeyo</strong>
+      <span>Local Workspace IDE</span>
+    </div>
 
-      <div class="studio-actions">
-        <button class="studio-context-action" type="button" (click)="focusScreen('channels')">← Workspace</button>
-      </div>
-    } @else {
-      <div class="studio-brand">
-        <strong>Codeyo</strong>
-        <span>Local Workspace IDE</span>
-      </div>
+    <nav aria-label="Screens">
+      <button type="button" (click)="focusScreen('channels'); selectChannel('ide')">§01 Workspace</button>
+      <button type="button" (click)="focusScreen('command')">§02 Command</button>
+    </nav>
 
-      <nav aria-label="Screens">
-        <button type="button" (click)="focusScreen('channels'); setChannelView('ide')">§01 Workspace</button>
-        <button type="button" (click)="focusScreen('channels'); setChannelView('thread')">§02 Journal</button>
-        <button type="button" (click)="focusScreen('command')">§03 Command</button>
-      </nav>
-
-      <div class="studio-actions">
-        <span class="release-pill">v0.1 dogfood</span>
-      </div>
-    }
+    <div class="studio-actions">
+      @if (activeChannelView === 'ide') {
+        <span class="studio-save-state">{{ editedFileCount }} unsaved</span>
+        <button
+          class="studio-tool-button assist-toggle"
+          type="button"
+          [class.active]="assistantPanelOpen"
+          (click)="toggleAssistantPanel()"
+        >
+          {{ assistantPanelOpen ? 'Hide Assist' : 'Show Assist' }}
+        </button>
+        <button class="studio-tool-button" type="button" (click)="saveCurrentFile()">Save ⌘S</button>
+        @if (canSaveAll) {
+          <button class="studio-tool-button" type="button" (click)="saveAllFiles()">Save All</button>
+        }
+        <button class="studio-tool-button run" type="button" [disabled]="runBusy" (click)="runCode()">
+          {{ runBusy ? 'Running...' : 'Run ▶' }}
+        </button>
+      }
+      <span class="release-pill">v0.1</span>
+    </div>
   </header>
 
   <main class="design-canvas">
     <section class="artboard channels-board" [class.is-hidden]="focusedScreen !== null && focusedScreen !== 'channels'">
       <button class="focus-chip" type="button" (click)="focusScreen('channels')">Focus</button>
 
-      <div class="channels-layout">
+      <div
+        class="channels-layout"
+        [style.--workspace-rail-width]="workspaceRailWidth + 'px'"
+        [style.--explorer-rail-width]="explorerRailWidth + 'px'"
+        [class.resizing-workspace]="resizingRail === 'workspace'"
+        [class.resizing-explorer]="resizingRail === 'explorer'"
+      >
         <aside class="left-rail">
           <div class="server-card">
             <span class="mono tiny">Workspace 01 / local</span>
@@ -47,29 +67,90 @@
           </div>
 
           <div class="section-label"><span>§01</span><b>Workspace</b><i></i></div>
-          <div class="channel-list">
+          <div class="workspace-tree">
             @for (channel of channels; track channel.id) {
-              <button
-                class="channel"
-                type="button"
-                [class.active]="activeChannelId === channel.id"
-                [class.unread]="channel.unread"
-                [class.mention]="channel.mention"
-                (click)="selectChannel(channel.id)"
-              >
-                <em>{{ channel.index }}</em>
-                <span>{{ channel.name }}</span>
-                @if (channel.unread) {
-                  <b>{{ channel.unread }}</b>
-                }
-                @if (channel.marker) {
-                  <strong>•</strong>
-                }
-              </button>
+              @if (channel.id === 'ide') {
+                <button
+                  class="workspace-node"
+                  type="button"
+                  [class.active]="activeChannelId === channel.id"
+                  [class.open]="activeChannelId !== channel.id"
+                  (click)="selectChannel(channel.id)"
+                >
+                  <em>{{ channel.index }}</em>
+                  <span>{{ channel.name }}</span>
+                </button>
+              }
             }
           </div>
 
-          <div class="section-label"><span>§02</span><b>Review Desk</b><i></i></div>
+          <div class="section-label" (contextmenu)="openChannelSectionMenu($event)"><span>§02</span><b>Channels</b><i></i></div>
+          <div class="channel-list">
+            @for (channel of channels; track channel.id) {
+              @if (channel.id !== 'ide') {
+                <button
+                  class="channel"
+                  type="button"
+                  [class.active]="activeChannelId === channel.id"
+                  [class.unread]="channel.unread"
+                  [class.mention]="channel.mention"
+                  (click)="selectChannel(channel.id)"
+                  (contextmenu)="openChannelMenu($event, channel.id)"
+                >
+                  <em>{{ channel.index }}</em>
+                  <span>{{ channel.name }}</span>
+                  @if (channel.unread) {
+                    <b>{{ channel.unread }}</b>
+                  }
+                  @if (channel.marker) {
+                    <strong>•</strong>
+                  }
+                </button>
+              }
+            }
+          </div>
+
+          @if (channelMenuOpen) {
+            <section
+              class="channel-menu"
+              [style.left.px]="channelMenuX"
+              [style.top.px]="channelMenuY"
+              (click)="$event.stopPropagation()"
+              (contextmenu)="$event.preventDefault(); $event.stopPropagation()"
+            >
+              <header>
+                <span>Channel Settings</span>
+                <b>{{ contextChannel?.name || 'Channels' }}</b>
+              </header>
+              <label>
+                <span>Name</span>
+                <input
+                  type="text"
+                  aria-label="New channel name"
+                  placeholder="VOICE"
+                  [value]="channelDraftName"
+                  (input)="updateChannelDraftName($event)"
+                  (keydown.enter)="createChannelFromMenu(); $event.preventDefault()"
+                />
+              </label>
+              <div class="channel-menu-actions">
+                <button type="button" (click)="createChannelFromMenu()">New Channel</button>
+                <button
+                  class="danger"
+                  type="button"
+                  [disabled]="!contextChannel || contextChannel.id === 'ide'"
+                  (click)="deleteContextChannel()"
+                >
+                  {{ channelDeleteArmed ? 'Confirm Delete' : 'Delete Channel' }}
+                </button>
+              </div>
+              @if (channelMenuNotice) {
+                <small>{{ channelMenuNotice }}</small>
+              }
+            </section>
+          }
+
+          <div class="section-label"><span>§03</span><b>Review Desk</b><i></i></div>
           <article class="live-card">
             <div><em></em><span class="mono">Local · Run Evidence</span></div>
             <h3>Snapshots and journal</h3>
@@ -78,33 +159,21 @@
 
           <div class="pair-card"><span>Future assist slot · reserved</span><i></i></div>
 
-          <div class="section-label"><span>§03</span><b>Tools</b><i></i></div>
+          <div class="section-label"><span>§04</span><b>Tools</b><i></i></div>
           <div class="tool-list">
             <span>Open Folder <b>⌘O</b></span>
             <span>Run ↔ Git <mark>v0.1</mark></span>
           </div>
           <div class="volume-note">Local-first · single user</div>
         </aside>
+        <button
+          class="rail-resizer workspace-resizer"
+          type="button"
+          aria-label="Resize workspace column"
+          (mousedown)="startRailResize($event, 'workspace')"
+        ></button>
 
         <main class="channel-main" [class.ide-active]="activeChannelView === 'ide'">
-          <nav class="workspace-tabs" aria-label="Channel workspace">
-            <button
-              type="button"
-              [class.active]="activeChannelView === 'thread'"
-              (click)="setChannelView('thread')"
-            >
-              Thread
-            </button>
-            <button
-              type="button"
-              [class.active]="activeChannelView === 'ide'"
-              (click)="setChannelView('ide')"
-            >
-              IDE Workspace
-            </button>
-            <span>{{ activeChannel.name }} · {{ activeChannelView === 'ide' ? 'IDE Workspace' : activeChannel.topic }}</span>
-          </nav>
-
           @if (activeChannelView === 'thread') {
           <section class="message-flow">
             @if (isDesktop && workspace) {
@@ -257,7 +326,7 @@
                 <div class="reactions"><span class="mine">🔥 × 7</span><span>🧠 × 2</span><button type="button">+</button></div>
                 <div class="thread-hint">
                   <span class="avatar small">PL</span>
-                  <b>3 Replies in Thread</b>
+                  <b>3 Linked Notes</b>
                   <em>plum asked about cache keys</em>
                 </div>
               </div>
@@ -460,22 +529,6 @@
                         {{ file.name }}
                       </button>
                     }
-                    <span class="ide-save-state">{{ editedFileCount }} unsaved</span>
-                    <button
-                      class="panel-toggle"
-                      type="button"
-                      [class.active]="assistantPanelOpen"
-                      (click)="toggleAssistantPanel()"
-                    >
-                      {{ assistantPanelOpen ? 'Hide Assist' : 'Show Assist' }}
-                    </button>
-                    <button class="btn ghost" type="button" (click)="saveCurrentFile()">Save ⌘S</button>
-                    @if (canSaveAll) {
-                      <button class="btn ghost save-all" type="button" (click)="saveAllFiles()">Save All ⇧⌘S</button>
-                    }
-                    <button class="btn accent" type="button" [disabled]="runBusy" (click)="runCode()">
-                      {{ runBusy ? 'Running...' : 'Run ▶' }}
-                    </button>
                   </div>
                   @if (gitComparison) {
                     <article class="git-compare-workbench" aria-label="Git comparison">
@@ -780,7 +833,7 @@
                     <button type="button" (click)="runTests()">Run Tests</button>
                     <button type="button" (click)="clearTerminal()">Clear</button>
                     <button type="button" [disabled]="runShared" (click)="shareRunToThread()">
-                      {{ runShared ? 'Shared' : 'Share to Thread' }}
+                      {{ runShared ? 'Saved' : 'Save to Run Log' }}
                     </button>
                   </div>
                 </header>
@@ -852,6 +905,12 @@
             </section>
           }
         </main>
+        <button
+          class="rail-resizer explorer-resizer"
+          type="button"
+          aria-label="Resize explorer column"
+          (mousedown)="startRailResize($event, 'explorer')"
+        ></button>
 
         <aside class="right-rail">
           <nav class="right-tabs" [class.desktop-tabs]="isDesktop" aria-label="Right workspace">
@@ -877,14 +936,14 @@
               >
                 Git
               </button>
-              <button
-                type="button"
-                [class.active]="activeRightPanel === 'settings'"
-                (click)="setRightPanel('settings')"
-              >
-                Settings
-              </button>
             }
+            <button
+              type="button"
+              [class.active]="activeRightPanel === 'settings'"
+              (click)="setRightPanel('settings')"
+            >
+              Settings
+            </button>
           </nav>
 
           @if (activeRightPanel === 'contributors') {
@@ -1183,6 +1242,60 @@
                 </div>
               </article>
 
+              <article class="settings-card density-settings">
+                <span class="mono tiny">Density</span>
+                <h3>Editor Density</h3>
+                <div class="storage-switch settings-storage" aria-label="Editor density">
+                  <button
+                    type="button"
+                    [class.active]="editorDensity === 'compact'"
+                    (click)="setEditorDensity('compact')"
+                  >
+                    Compact
+                  </button>
+                  <button
+                    type="button"
+                    [class.active]="editorDensity === 'comfortable'"
+                    (click)="setEditorDensity('comfortable')"
+                  >
+                    Comfortable
+                  </button>
+                </div>
+              </article>
+
+              <article class="settings-card font-settings">
+                <span class="mono tiny">Editor</span>
+                <h3>Font Size</h3>
+                <div class="font-size-control">
+                  <button type="button" aria-label="Decrease editor font size" (click)="stepEditorFontSize(-0.5)">A-</button>
+                  <input
+                    type="range"
+                    aria-label="Editor font size slider"
+                    [min]="editorFontSizeMin"
+                    [max]="editorFontSizeMax"
+                    step="0.5"
+                    [value]="editorFontSizePx"
+                    (input)="updateEditorFontSize($event)"
+                  />
+                  <input
+                    class="font-size-input"
+                    type="number"
+                    aria-label="Editor font size"
+                    [min]="editorFontSizeMin"
+                    [max]="editorFontSizeMax"
+                    step="0.5"
+                    [value]="editorFontSizePx"
+                    (input)="updateEditorFontSize($event)"
+                  />
+                  <button type="button" aria-label="Increase editor font size" (click)="stepEditorFontSize(0.5)">A+</button>
+                </div>
+                <div class="font-size-meta">
+                  <span>{{ editorFontSizePx }}px</span>
+                  <span>{{ editorLineHeightPx }}px line</span>
+                </div>
+                <button class="btn ghost" type="button" (click)="resetEditorFontSize()">Reset</button>
+              </article>
+
               @if (workspace?.trusted) {
                 <article class="settings-card">
                   <span class="mono tiny">Storage</span>
@@ -1424,81 +1537,6 @@
       }
     </section>
 
-    <section class="artboard dm-board" [class.is-hidden]="focusedScreen !== null && focusedScreen !== 'dm'">
-      <button class="focus-chip" type="button" (click)="focusScreen('dm')">Focus</button>
-
-      <div class="dm-layout">
-        <aside class="letters-list">
-          <div class="section-label"><span>§01</span><b>Correspondence</b><i></i></div>
-          <label class="letter-search">search letters...<kbd>⌘F</kbd></label>
-
-          @for (thread of dmThreads; track thread.id) {
-            <button class="letter-row" type="button" [class.active]="activeDmId === thread.id" (click)="selectDm(thread.id)">
-              <span class="avatar" [class.muted]="thread.id === 'kiwi'">{{ thread.initials }}</span>
-              <div>
-                <h3>{{ thread.name }}</h3>
-                <p>{{ thread.preview }}</p>
-              </div>
-              <time>{{ thread.time }}</time>
-              @if (thread.id === 'review') {
-                <strong>1</strong>
-              }
-            </button>
-          }
-        </aside>
-
-        <main class="letter-paper">
-          <header class="letter-head">
-            <span class="avatar large">{{ activeDmThread.initials }}</span>
-            <div>
-              <span class="mono">To · {{ activeDmThread.name }} · #7128</span>
-              <h1>{{ activeDmThread.title }}</h1>
-              <p>{{ activeDmThread.subtitle }}</p>
-            </div>
-            <div class="letter-actions">
-              <button class="btn ghost compact" type="button">+ 投递到 IDE</button>
-              <button class="btn ghost square" type="button">··</button>
-            </div>
-          </header>
-
-          <section class="letter-stream">
-            @for (message of activeDmThread.messages; track message.author + message.time + message.body; let index = $index) {
-              <article class="letter" [class.mine]="message.mine" [class.theirs]="!message.mine" [class.narrow]="message.body.length < 32" [class.drop-cap]="message.mine && index === 0">
-                <div class="letter-meta">
-                  @if (!message.mine) {
-                    <span class="avatar micro">{{ activeDmThread.initials }}</span>
-                  }
-                  <b>{{ message.author }}</b>
-                  <time>{{ message.time }}</time>
-                </div>
-                <p>{{ message.body }}</p>
-                @if (message.quote) {
-                  <blockquote>“{{ message.quote }}”</blockquote>
-                }
-                @if (message.ps) {
-                  <div class="letter-ps"><b>{{ message.mine ? 'PS:' : '附:' }}</b> {{ message.ps }}</div>
-                }
-              </article>
-              @if (!message.mine) {
-                <div class="letter-reactions"><span>💡 × 2</span></div>
-              }
-              @if (message.mine && index === 2) {
-                <div class="letter-reactions right"><span>🍀 × 1</span></div>
-              }
-            }
-            <div class="asterism">✦ ✦ ✦</div>
-          </section>
-
-          <footer class="dm-composer">
-            <span>Postscript ▸</span>
-            <p>continue the correspondence...<i></i></p>
-            <small>Shift+Return ↵ newline</small>
-            <button class="btn primary" type="button">Send ↵</button>
-          </footer>
-        </main>
-      </div>
-    </section>
-
     <section class="artboard command-board" [class.is-hidden]="focusedScreen !== null && focusedScreen !== 'command'">
       <button class="focus-chip" type="button" (click)="focusScreen('command')">Focus</button>
 
@@ -1583,128 +1621,5 @@
       </div>
     </section>
 
-    <section class="artboard component-board" [class.is-hidden]="focusedScreen !== null && focusedScreen !== 'components'">
-      <button class="focus-chip" type="button" (click)="focusScreen('components')">Focus</button>
-
-      <header class="masthead">
-        <div class="mast-brand">
-          <span class="brand-name">codeyo</span>
-          <span class="mono">Codeyo v0.1 · Reference Sheet · Nº 24</span>
-        </div>
-        <div class="mast-actions"><span class="mono">11 Primitives · Lift Freely</span></div>
-      </header>
-
-      <main class="component-grid">
-        <article class="primitive span-6 type-primitive">
-          <div class="section-label"><span>§01</span><b>Type Scale</b><i></i></div>
-          <dl class="type-scale">
-            <dt>Serif / 64</dt><dd><h1>Workspace</h1></dd>
-            <dt>Serif / 32 italic</dt><dd><h2>Dear plum,</h2></dd>
-            <dt>Serif / 20</dt><dd><p>Body - quotes, message text.</p></dd>
-            <dt>Mono / 13 bold caps</dt><dd><span class="mono sample">Handle / kicker</span></dd>
-            <dt>Mono / 10.5 caps</dt><dd><span class="mono sample small">Section label</span></dd>
-          </dl>
-        </article>
-
-        <article class="primitive span-6 palette-block">
-          <div class="section-label"><span>§02</span><b>Palette</b><i></i></div>
-          <div class="swatches">
-            <span style="--sw:#F7F1E3">Aa <b>paper</b><small>#F7F1E3</small></span>
-            <span class="dark-swatch" style="--sw:#1A1A1A">Aa <b>ink</b><small>#1A1A1A</small></span>
-            <span style="--sw:#E8C547">Aa <b>amber</b><small>#E8C547</small></span>
-            <span style="--sw:#FAEAB5">Aa <b>amber soft</b><small>#FAEAB5</small></span>
-            <span style="--sw:#D9CCFF">Aa <b>lavender</b><small>#D9CCFF</small></span>
-            <span class="deep-swatch" style="--sw:#6E4BFF">Aa <b>lavender deep</b><small>#6E4BFF</small></span>
-            <span style="--sw:#FFC4A6">Aa <b>peach</b><small>#FFC4A6</small></span>
-            <span class="peach-swatch" style="--sw:#FF7A5C">Aa <b>peach deep</b><small>#FF7A5C</small></span>
-          </div>
-        </article>
-
-        <article class="primitive span-6 button-primitive">
-          <div class="section-label"><span>§03</span><b>Buttons</b><i></i></div>
-          <div class="component-rows">
-            <span>Primary</span>
-            <div><button class="btn primary" type="button">Save</button><button class="btn primary" type="button">Send ↵</button><button class="btn primary" type="button">✦ Open IDE ⌘E</button></div>
-            <span>Accent</span>
-            <div><button class="btn accent" type="button">Join</button><button class="btn accent" type="button">Subscribe</button><button class="btn accent wide" type="button">Create Channel</button></div>
-            <span>Ghost</span>
-            <div><button class="btn ghost" type="button">Cancel</button><button class="btn ghost" type="button">··· More</button><button class="btn ghost" type="button">← Back</button></div>
-            <span>Danger</span>
-            <div><button class="btn danger" type="button">Delete</button><button class="btn danger" type="button">Leave Server</button></div>
-          </div>
-        </article>
-
-        <article class="primitive span-6 tags-primitive">
-          <div class="section-label"><span>§04</span><b>Badges & Tags</b><i></i></div>
-          <div class="tag-demo">
-            <span class="tag lavender">Assist</span>
-            <span class="tag peach">Run</span>
-            <span class="tag amber">New</span>
-            <span class="tag mint">Online</span>
-            <span class="tag peach">@ 3</span>
-            <span class="tag">Pinned</span>
-            <span class="tag">Beta</span>
-            <span class="keycap">⌘K</span>
-            <span class="keycap">⌘E</span>
-            <span class="keycap">↵</span>
-            <span class="keycap">Esc</span>
-          </div>
-        </article>
-
-        <article class="primitive span-3">
-          <div class="section-label"><span>§05</span><b>Reactions</b><i></i></div>
-          <div class="reactions"><span>😭 × 4</span><span class="mine">🔥 × 7</span><button type="button">+</button></div>
-        </article>
-
-        <article class="primitive span-3">
-          <div class="section-label"><span>§06</span><b>Avatars</b><i></i></div>
-          <div class="avatar-line">
-            <span class="avatar large">PL</span>
-            <span class="avatar muted large">AS</span>
-            <span class="avatar large">JY</span>
-            <span class="avatar muted large">NO</span>
-          </div>
-        </article>
-
-        <article class="primitive span-3">
-          <div class="section-label"><span>§07</span><b>Labels</b><i></i></div>
-          <div class="section-label mini"><span>§08</span><b>Nested</b><i></i></div>
-          <div class="asterism">✦ ✦ ✦</div>
-        </article>
-
-        <article class="primitive span-5">
-          <div class="section-label"><span>§08</span><b>Code Block</b><i></i></div>
-          <div class="code-card ai-code">
-            <div class="code-head"><span>Review</span><b>fib_memo.py · 5 L</b></div>
-            <pre><code><b>01</b>@cache
-<b>02</b>def fib(n):
-<b>03</b>    if n &lt; 2: return n
-<b>04</b>    return fib(n-1) + fib(n-2)
-<b>05</b>print(fib(40))</code></pre>
-            <div class="code-note">[Note] Original 2.1s → 0.0002s</div>
-          </div>
-        </article>
-
-        <article class="primitive span-4">
-          <div class="section-label"><span>§09</span><b>Inputs</b><i></i></div>
-          <label class="search-input">search channels, people, files<i></i></label>
-          <div class="mini-composer"><span>Reply ▸</span><p>paste your code here<i></i></p></div>
-        </article>
-
-        <article class="primitive span-3">
-          <div class="section-label"><span>§10</span><b>Cards</b><i></i></div>
-          <div class="mini-live-card"><em></em><b>Run</b><span>递归室</span></div>
-          <div class="mini-pin-card">“画出来就懂了。”</div>
-        </article>
-
-        <article class="primitive span-12 quote-sheet">
-          <div class="section-label"><span>§11</span><b>Pull Quote</b><i></i></div>
-          <blockquote>
-            <p>“Beginner-friendly does not mean low density. It means every dense thing has a handle.”</p>
-            <cite>Codeyo Editorial Rule</cite>
-          </blockquote>
-        </article>
-      </main>
-    </section>
   </main>
 </div>
