@@ -18,6 +18,7 @@ function createDesktopHarness(
     ...workspaceOverrides,
   };
   let fileListener: ((change: WorkspaceFileChange) => void | Promise<void>) | undefined;
+  let openTerminalMenuHandler: (() => void) | undefined;
   let version = 1;
   const recoveryBuffers = new Map<string, { content: string; updatedAt: string }>();
   const language = (filePath: string) =>
@@ -209,6 +210,14 @@ function createDesktopHarness(
     environment: {
       checkTools,
     },
+    appMenu: {
+      onOpenTerminal: vi.fn((handler: () => void) => {
+        openTerminalMenuHandler = handler;
+        return () => {
+          openTerminalMenuHandler = undefined;
+        };
+      }),
+    },
   } as unknown as CodeyoDesktopApi;
   return {
     api,
@@ -217,6 +226,9 @@ function createDesktopHarness(
     run,
     saveProfile,
     checkTools,
+    openTerminalFromMenu() {
+      openTerminalMenuHandler?.();
+    },
     async change(filePath: string, content: string): Promise<void> {
       fileContents[filePath] = content;
       version += 1;
@@ -314,6 +326,54 @@ describe('App', () => {
     expect(compiled.querySelector('.side-file-system')).toBeTruthy();
     expect(compiled.querySelector('.codeyo-editor-host')?.getAttribute('aria-label')).toContain('fib.py');
     expect(compiled.querySelector('.cm-editor')).toBeTruthy();
+  });
+
+  it('should start the desktop app on a read-only README home before a folder is opened', async () => {
+    const desktop = createDesktopHarness({ 'main.py': 'print("ready")\n' });
+    window.codeyo = desktop.api;
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(fixture.componentInstance.homeMode).toBe(true);
+    expect(compiled.querySelector('.codeyo-editor-host')?.getAttribute('aria-label')).toContain('README.md');
+    expect(compiled.querySelector('.ide-terminal')).toBeFalsy();
+    expect(compiled.querySelector('.studio-actions')?.textContent).toContain('Open Folder');
+    expect(compiled.querySelector('.vscode-tree')?.textContent).toContain('NO FOLDER');
+  });
+
+  it('should require workspace trust before opening the terminal from the app menu', async () => {
+    const desktop = createDesktopHarness(
+      { 'main.py': 'print("ready")\n' },
+      { trusted: false },
+    );
+    window.codeyo = desktop.api;
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    await app.openDesktopWorkspace();
+    fixture.detectChanges();
+
+    expect(app.workspaceTrustPromptOpen).toBe(true);
+    expect(fixture.nativeElement.querySelector('.workspace-trust-modal')?.textContent).toContain('Trust this workspace');
+    expect(fixture.nativeElement.querySelector('.ide-terminal')).toBeFalsy();
+
+    app.keepWorkspaceReadOnly();
+    fixture.detectChanges();
+    expect(app.workspaceTrustPromptOpen).toBe(false);
+
+    desktop.openTerminalFromMenu();
+    fixture.detectChanges();
+    expect(app.workspaceTrustPromptOpen).toBe(true);
+    expect(app.terminalPaneOpen).toBe(false);
+
+    desktop.workspace.trusted = true;
+    await app.trustWorkspaceFromPrompt();
+    fixture.detectChanges();
+    expect(app.workspaceTrustPromptOpen).toBe(false);
+    expect(app.terminalPaneOpen).toBe(true);
+    expect(fixture.nativeElement.querySelector('.ide-terminal')).toBeTruthy();
   });
 
   it('should keep the assist slot hidden by default and toggle it open', () => {
@@ -466,6 +526,40 @@ describe('App', () => {
 
     app.deleteActiveFile();
     expect(app.ideFiles.some((file) => file.name === 'draft.py')).toBe(false);
+  });
+
+  it('should tuck file actions into the explorer actions menu', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+
+    const explorerHeading = fixture.nativeElement.querySelector('.explorer-heading') as HTMLElement;
+    const filesPanel = fixture.nativeElement.querySelector('.side-file-system') as HTMLElement;
+    const tree = fixture.nativeElement.querySelector('.vscode-tree') as HTMLElement;
+    expect(explorerHeading.textContent).toContain('Explorer');
+    expect(tree.textContent).toContain('ATELIER-IDE');
+    expect(filesPanel.textContent).toContain('Outline');
+    expect(explorerHeading.textContent).not.toContain('+ File');
+    expect(filesPanel.textContent).not.toContain('Active buffer');
+    expect(filesPanel.querySelector('.file-bubble-card')).toBeFalsy();
+
+    const toggle = fixture.nativeElement.querySelector('.explorer-actions-toggle') as HTMLButtonElement;
+    toggle.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+
+    const menu = fixture.nativeElement.querySelector('.explorer-actions-menu') as HTMLElement;
+    expect(app.filesActionsMenuOpen).toBe(true);
+    expect(menu.textContent).toContain('New File');
+    expect(menu.textContent).toContain('Request Review');
+    expect(menu.textContent).toContain('Duplicate');
+    expect(menu.textContent).toContain('Show Assist');
+
+    const newFileButton = Array.from(menu.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('New File')) as HTMLButtonElement;
+    newFileButton.click();
+    fixture.detectChanges();
+    expect(app.filesActionsMenuOpen).toBe(false);
+    expect(app.creatingFile).toBe(true);
   });
 
   it('should filter files and execute terminal commands against buffers', () => {
@@ -1105,7 +1199,7 @@ describe('App', () => {
     fixture.detectChanges();
 
     expect(app.recoveryBufferCount).toBe(1);
-    expect(fixture.nativeElement.querySelector('.recovery-center')?.textContent).toContain('scratch.py');
+    expect(fixture.nativeElement.querySelector('.explorer-recovery')?.textContent).toContain('scratch.py');
 
     await app.restoreRecovery(app.recoveryBuffers[0]);
     expect(app.activeIdeFile.path).toBe('scratch.py');
@@ -2700,6 +2794,7 @@ describe('App', () => {
 
     app.pythonExecutable = 'missing-python';
     await app.checkEnvironment();
+    app.setRightPanel('settings');
     fixture.detectChanges();
 
     expect(desktop.checkTools).toHaveBeenCalledWith(

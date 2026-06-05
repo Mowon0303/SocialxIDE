@@ -82,4 +82,7 @@ contextBridge.exposeInMainWorld('codeyo', {
   environment: {
     checkTools: (workspaceId, tools) => invoke('environment:check-tools', { workspaceId, tools }),
   },
+  appMenu: {
+    onOpenTerminal: (handler) => on('menu:open-terminal', handler),
+  },
 });

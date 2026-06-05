@@ -48,6 +48,7 @@ const trustedWorkspaceRequiredChannels = Object.freeze([
 
 const rendererSubscribedChannels = Object.freeze([
   'files:changed',
+  'menu:open-terminal',
   'terminal:data',
   'terminal:exit',
 ]);

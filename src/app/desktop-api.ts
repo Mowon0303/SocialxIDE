@@ -276,6 +276,9 @@ export interface CodeyoDesktopApi {
   environment: {
     checkTools(workspaceId: string, tools: ToolCheckRequest[]): Promise<ToolCheckResult[]>;
   };
+  appMenu?: {
+    onOpenTerminal(handler: () => void): () => void;
+  };
 }
 
 declare global {

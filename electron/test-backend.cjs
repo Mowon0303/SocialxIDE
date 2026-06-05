@@ -908,8 +908,8 @@ test('preload IPC surface matches main handlers and renderer events', () => {
 
   assert.ok(surface.requested.includes('files:backup-recovery-sync'));
   assert.ok(surface.requested.includes('git:apply-patch'));
-  assert.deepEqual(surface.subscribed, ['files:changed', 'terminal:data', 'terminal:exit']);
-  assert.deepEqual(surface.published, ['files:changed', 'terminal:data', 'terminal:exit']);
+  assert.deepEqual(surface.subscribed, ['files:changed', 'menu:open-terminal', 'terminal:data', 'terminal:exit']);
+  assert.deepEqual(surface.published, ['files:changed', 'menu:open-terminal', 'terminal:data', 'terminal:exit']);
   assert.throws(
     () => assertPreloadIpcSurfaceComplete({
       registeredChannels,

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, shell } = require('electron');
 const fs = require('node:fs/promises');
 const nativeFs = require('node:fs');
 const path = require('node:path');
@@ -198,9 +198,81 @@ function createWindow() {
   return mainWindow;
 }
 
+function installApplicationMenu() {
+  const isMac = process.platform === 'darwin';
+  const template = [
+    ...(isMac ? [{
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    }] : []),
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+      ],
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ],
+    },
+    {
+      label: 'Terminal',
+      submenu: [
+        {
+          label: 'Open Terminal',
+          accelerator: 'Control+`',
+          click: () => {
+            mainWindow?.webContents.send('menu:open-terminal');
+          },
+        },
+      ],
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        ...(isMac ? [
+          { type: 'separator' },
+          { role: 'front' },
+        ] : [
+          { role: 'close' },
+        ]),
+      ],
+    },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 app.whenReady().then(async () => {
   store = new CodeyoStore(app.getPath('userData'));
   registerHandlers();
+  installApplicationMenu();
   const window = createWindow();
   if (startupSmoke) {
     await runStartupSmoke(window);

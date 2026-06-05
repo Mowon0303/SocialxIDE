@@ -21,22 +21,27 @@
 
     <div class="studio-actions">
       @if (activeChannelView === 'ide') {
-        <span class="studio-save-state">{{ editedFileCount }} unsaved</span>
-        <button
-          class="studio-tool-button assist-toggle"
-          type="button"
-          [class.active]="assistantPanelOpen"
-          (click)="toggleAssistantPanel()"
-        >
-          {{ assistantPanelOpen ? 'Hide Assist' : 'Show Assist' }}
-        </button>
-        <button class="studio-tool-button" type="button" (click)="saveCurrentFile()">Save ⌘S</button>
-        @if (canSaveAll) {
-          <button class="studio-tool-button" type="button" (click)="saveAllFiles()">Save All</button>
+        @if (homeMode) {
+          <span class="studio-save-state">No folder open</span>
+          <button class="studio-tool-button run" type="button" (click)="openDesktopWorkspace()">Open Folder</button>
+        } @else {
+          <span class="studio-save-state">{{ editedFileCount }} unsaved</span>
+          <button
+            class="studio-tool-button assist-toggle"
+            type="button"
+            [class.active]="assistantPanelOpen"
+            (click)="toggleAssistantPanel()"
+          >
+            {{ assistantPanelOpen ? 'Hide Assist' : 'Show Assist' }}
+          </button>
+          <button class="studio-tool-button" type="button" (click)="saveCurrentFile()">Save ⌘S</button>
+          @if (canSaveAll) {
+            <button class="studio-tool-button" type="button" (click)="saveAllFiles()">Save All</button>
+          }
+          <button class="studio-tool-button run" type="button" [disabled]="runBusy" (click)="runCode()">
+            {{ runBusy ? 'Running...' : 'Run ▶' }}
+          </button>
         }
-        <button class="studio-tool-button run" type="button" [disabled]="runBusy" (click)="runCode()">
-          {{ runBusy ? 'Running...' : 'Run ▶' }}
-        </button>
       }
       <span class="release-pill">v0.1</span>
     </div>
@@ -476,7 +481,7 @@
             </article>
           }
           } @else {
-            <section class="ide-plane" aria-label="IDE workspace panel">
+            <section class="ide-plane" [class.terminal-closed]="!terminalPaneOpen" aria-label="IDE workspace panel">
               @if (quickOpenVisible) {
                 <div class="quick-open-backdrop" (click)="closeQuickOpen()"></div>
                 <section class="quick-open-palette" aria-label="Quick open files" (click)="$event.stopPropagation()">
@@ -520,7 +525,7 @@
               <div class="ide-plane-grid">
                 <main class="ide-editor">
                   <div class="ide-tabs">
-                    @for (file of ideFiles; track file.path) {
+                    @for (file of visibleIdeFiles; track file.path) {
                       <button
                         type="button"
                         [class.active]="activeIdeFile.path === file.path"
@@ -758,7 +763,7 @@
                           [ariaLabel]="'Edit ' + activeIdeFile.name"
                           [content]="activeEditorText"
                           [language]="activeIdeFile.lang"
-                          [readOnly]="isDesktop && !!workspace && !workspace.trusted"
+                          [readOnly]="homeMode || (isDesktop && !!workspace && !workspace.trusted)"
                           [diagnostics]="activeDiagnostics"
                           [revealLine]="diagnosticRevealLine"
                           [revealColumn]="diagnosticRevealColumn"
@@ -804,6 +809,7 @@
                 }
               </div>
 
+              @if (terminalPaneOpen) {
               <footer class="ide-terminal" [class.desktop-console]="isDesktop">
                 <header class="console-toolbar">
                   <div class="console-tabs">
@@ -902,6 +908,7 @@
                   </form>
                 }
               </footer>
+              }
             </section>
           }
         </main>
@@ -912,7 +919,7 @@
           (mousedown)="startRailResize($event, 'explorer')"
         ></button>
 
-        <aside class="right-rail">
+        <aside class="right-rail" [class.files-active]="activeRightPanel === 'files'">
           <nav class="right-tabs" [class.desktop-tabs]="isDesktop" aria-label="Right workspace">
             <button
               type="button"
@@ -997,68 +1004,58 @@
             </div>
           } @else if (activeRightPanel === 'files') {
             <section class="side-file-system">
-              @if (isDesktop) {
-                <article class="workspace-connect" [class.trusted]="workspace?.trusted">
-                  <span class="mono tiny">Local workspace</span>
-                  <p>{{ workspaceNotice }}</p>
-                  <button class="btn accent" type="button" (click)="openDesktopWorkspace()">Open Folder</button>
-                  @if (!workspace && recentWorkspace) {
-                    <button class="btn primary" type="button" (click)="resumeRecentWorkspace()">
-                      Resume {{ recentWorkspace.name }}
-                    </button>
-                  }
-                  @if (workspace && !workspace.trusted) {
-                    <button class="btn primary" type="button" (click)="trustDesktopWorkspace()">Trust & Enable</button>
-                  }
-                  @if (workspace?.trusted) {
-                    <div class="storage-switch">
-                      <button type="button" [class.active]="workspace?.storageMode === 'app-db'" (click)="migrateStorage('app-db')">App DB</button>
-                      <button type="button" [class.active]="workspace?.storageMode === 'workspace-codeyo'" (click)="migrateStorage('workspace-codeyo')">.codeyo/</button>
-                    </div>
-                  }
-                </article>
-                @if (workspace?.trusted && recoveryBufferCount > 0) {
-                  <article class="recovery-center">
-                    <div class="section-label tight"><span>§05</span><b>Recovery</b><i></i></div>
-                    <p>{{ recoveryBufferCount }} unsaved recovery {{ recoveryBufferCount === 1 ? 'copy' : 'copies' }} available.</p>
-                    <div class="recovery-list">
-                      @for (buffer of recoveryBuffers; track buffer.filePath) {
-                        <article>
-                          <div>
-                            <b>{{ buffer.filePath }}</b>
-                            <small>{{ recoveryAgeLabel(buffer) }}</small>
-                          </div>
-                          <button type="button" (click)="restoreRecovery(buffer)">Restore</button>
-                          <button class="danger-action" type="button" (click)="discardRecovery(buffer)">Discard</button>
-                        </article>
-                      }
-                    </div>
-                  </article>
-                }
-              }
               <div class="explorer-heading">
-                <div class="section-label tight"><span>§04</span><b>Explorer</b><i></i></div>
-                <button type="button" (click)="startNewFile()">+ File</button>
+                <span>Explorer</span>
+                <button
+                  class="explorer-actions-toggle"
+                  type="button"
+                  [class.active]="filesActionsMenuOpen"
+                  aria-label="Explorer actions"
+                  [attr.aria-expanded]="filesActionsMenuOpen"
+                  (click)="toggleFilesActionsMenu($event)"
+                >
+                  ...
+                </button>
+                @if (filesActionsMenuOpen) {
+                  <div
+                    class="explorer-actions-menu"
+                    (click)="$event.stopPropagation()"
+                    (contextmenu)="$event.preventDefault(); $event.stopPropagation()"
+                  >
+                    @if (isDesktop) {
+                      <button type="button" (click)="runFilesAction('open-folder')">Open Folder</button>
+                    }
+                    @if (isDesktop && !workspace && recentWorkspace) {
+                      <button type="button" (click)="runFilesAction('resume-workspace')">Resume Workspace</button>
+                    }
+                    @if (isDesktop && workspace && !workspace.trusted) {
+                      <button type="button" (click)="runFilesAction('trust-workspace')">Trust Workspace</button>
+                    }
+                    @if (!homeMode) {
+                      <button type="button" (click)="runFilesAction('new-file')">New File</button>
+                      <span></span>
+                      <button type="button" (click)="runFilesAction('review')">
+                        {{ isDesktop && activeBufferRunEvidence ? 'Review + Run Evidence' : 'Request Review' }}
+                      </button>
+                      <button type="button" (click)="runFilesAction('duplicate')">Duplicate</button>
+                      @if (isDesktop && workspace?.trusted) {
+                        <button type="button" (click)="runFilesAction('rename')">Rename</button>
+                      }
+                      @if (canDeleteActiveFile) {
+                        <button class="danger-action" type="button" (click)="runFilesAction('delete')">Delete</button>
+                      }
+                      @if (!assistantPanelOpen) {
+                        <button type="button" (click)="runFilesAction('assist')">Show Assist</button>
+                      }
+                    }
+                  </div>
+                }
               </div>
 
-              <label class="explorer-filter">
-                <span>/</span>
-                <input
-                  type="text"
-                  aria-label="Filter buffers"
-                  placeholder="FILTER BUFFERS"
-                  [value]="fileQuery"
-                  (input)="updateFileQuery($event)"
-                />
-                @if (fileQuery) {
-                  <button type="button" (click)="clearFileQuery()">Clear</button>
-                }
-              </label>
-
               <div class="vscode-tree">
-                <button class="tree-node folder open" type="button" (click)="toggleWorkspace()">
-                  <span>{{ workspaceExpanded ? '▾' : '▸' }} {{ workspace?.name || 'codeyo-workshop' }}</span>
-                  <b>{{ ideFiles.length }}</b>
+                <button class="tree-node folder root open" type="button" (click)="toggleWorkspace()">
+                  <span class="tree-caret">{{ workspaceExpanded ? '⌄' : '›' }}</span>
+                  <span class="tree-label">{{ explorerRootName }}</span>
                 </button>
                 @if (workspaceExpanded) {
                   @for (entry of explorerTreeEntries; track entry.id) {
@@ -1070,30 +1067,25 @@
                         [style.padding-left.px]="treeNodePadding(entry.depth)"
                         (click)="toggleExplorerFolder(entry.path)"
                       >
-                        <span>{{ entry.expanded ? '▾' : '▸' }} {{ entry.name }}</span>
+                        <span class="tree-caret">{{ entry.expanded ? '⌄' : '›' }}</span>
+                        <span class="tree-label">{{ entry.name }}</span>
                       </button>
                     } @else if (entry.file) {
                       <button
-                        class="tree-node file child depth-2"
+                        class="tree-node file child"
                         type="button"
                         [class.active]="activeIdeFile.path === entry.file.path"
                         [style.padding-left.px]="treeNodePadding(entry.depth)"
                         [title]="entry.file.path"
                         (click)="selectIdeFile(entry.file.path)"
                       >
-                        <span>{{ entry.name }}</span>
-                        <small>{{ entry.file.status }}</small>
-                        <i>
-                          @if (entry.file.name === 'fib.py') {
-                            <em class="avatar small">PL</em><em class="avatar small cyan">NO</em>
-                          } @else if (entry.file.name === 'notes.md') {
-                            <em class="avatar small cyan">RV</em>
-                          } @else if (entry.file.name === 'tests.py') {
-                            <em class="avatar small coral">J</em>
-                          } @else {
-                            <em class="avatar small green">YU</em>
-                          }
-                        </i>
+                        <span class="file-glyph" [attr.data-kind]="explorerFileIconClass(entry.file)">
+                          {{ explorerFileIcon(entry.file) }}
+                        </span>
+                        <span class="tree-label">{{ entry.name }}</span>
+                        @if (explorerFileStatus(entry.file)) {
+                          <small>{{ explorerFileStatus(entry.file) }}</small>
+                        }
                       </button>
                     }
                   }
@@ -1122,110 +1114,29 @@
                 }
               </div>
 
-              <article class="file-bubble-card">
-                <div class="bubble-row">
-                  <span class="avatar">WS</span>
-                  <span class="avatar cyan">RN</span>
-                </div>
-                <p>正在编辑 <b>{{ activeIdeFile.name }}</b>。Run 输出会同步到 terminal。</p>
-              </article>
-
-              <article class="file-bubble-card amber">
-                <span class="mono tiny">Active buffer</span>
-                <h3>{{ activeIdeFile.name }}</h3>
-                <p>{{ activeSaveLabel }}</p>
-                <div class="buffer-actions">
-                  <button type="button" (click)="requestPeerReview()">
-                    {{ isDesktop && activeBufferRunEvidence ? 'Review + Run Evidence' : 'Request Review' }}
+              @if (workspace?.trusted && recoveryBufferCount > 0) {
+                <div class="vscode-outline explorer-recovery">
+                  <button class="outline-heading" type="button">
+                    <span>⌄</span>
+                    <b>Recovery</b>
+                    <em>{{ recoveryBufferCount }}</em>
                   </button>
-                  <button type="button" (click)="duplicateActiveFile()">Duplicate</button>
-                  @if (isDesktop && workspace?.trusted) {
-                    <button type="button" (click)="renameActiveFile()">Rename</button>
-                  }
-                  @if (canDeleteActiveFile) {
-                    <button class="danger-action" type="button" (click)="deleteActiveFile()">Delete</button>
-                  }
-                  @if (!assistantPanelOpen) {
-                    <button type="button" (click)="showAssistantPanel()">Show Assist</button>
-                  }
-                </div>
-              </article>
-              @if (isDesktop && workspace?.trusted && (activeIdeFile.lang === 'python' || activeIdeFile.lang === 'cpp')) {
-                <article class="run-profile-card">
-                  <div class="section-label tight"><span>§08</span><b>Run Profile</b><i></i></div>
-                  <label>
-                    <span>Command</span>
-                    <input
-                      type="text"
-                      aria-label="Run profile command"
-                      [value]="activeIdeFile.lang === 'cpp' ? cppExecutable : pythonExecutable"
-                      (input)="updateProfileCommand($event)"
-                    />
-                  </label>
-                  <label>
-                    <span>{{ activeIdeFile.lang === 'cpp' ? 'Compiler Flags' : 'Arguments' }}</span>
-                    <input
-                      type="text"
-                      aria-label="Run profile arguments"
-                      placeholder="OPTIONAL FLAGS"
-                      [value]="profileArgs"
-                      (input)="updateProfileArgs($event)"
-                    />
-                  </label>
-                  @if (activeIdeFile.lang === 'cpp') {
-                    <label>
-                      <span>Program Arguments</span>
-                      <input
-                        type="text"
-                        aria-label="C++ program arguments"
-                        placeholder="OPTIONAL ARGS"
-                        [value]="cppProgramArgs"
-                        (input)="updateCppProgramArgs($event)"
-                      />
-                    </label>
-                  }
-                  @if (activeIdeFile.lang === 'cpp' && cppSourceCandidates.length > 0) {
-                    <div class="run-sources">
-                      <span>Source Files</span>
-                      @for (file of cppSourceCandidates; track file.path) {
-                        <label>
-                          <input
-                            type="checkbox"
-                            [checked]="isCppSourceSelected(file.path)"
-                            [disabled]="file.path === activeIdeFile.path"
-                            (change)="toggleCppSource(file.path, $event)"
-                          />
-                          <b>{{ file.path }}</b>
-                        </label>
-                      }
+                  @for (buffer of recoveryBuffers; track buffer.filePath) {
+                    <div class="recovery-line">
+                      <span>{{ buffer.filePath }}</span>
+                      <button type="button" (click)="restoreRecovery(buffer)">Restore</button>
+                      <button type="button" (click)="discardRecovery(buffer)">Discard</button>
                     </div>
                   }
-                  <div class="environment-card">
-                    <div>
-                      <span>Environment</span>
-                      <b>{{ environmentSummary }}</b>
-                    </div>
-                    <button class="btn ghost" type="button" [disabled]="environmentBusy" (click)="checkEnvironment()">
-                      {{ environmentBusy ? 'Checking...' : 'Check Tools' }}
-                    </button>
-                    @if (environmentChecks.length > 0) {
-                      <div class="environment-list">
-                        @for (check of environmentChecks; track check.id) {
-                          <article [class.missing]="!check.available">
-                            <strong>{{ check.label }}</strong>
-                            <em>{{ toolCheckStatus(check) }}</em>
-                            <small>{{ check.version || check.message }}</small>
-                          </article>
-                        }
-                      </div>
-                    }
-                  </div>
-                  <button class="btn accent" type="button" [disabled]="runBusy" (click)="runCode()">
-                    {{ runBusy ? 'Running...' : 'Run Profile ▶' }}
-                  </button>
-                  <button class="btn ghost" type="button" (click)="saveRunProfile()">Save Profile</button>
-                </article>
+                </div>
               }
+
+              <div class="vscode-outline">
+                <button class="outline-heading" type="button">
+                  <span>›</span>
+                  <b>Outline</b>
+                </button>
+              </div>
             </section>
           } @else if (activeRightPanel === 'settings') {
             <section class="settings-panel">
@@ -1622,4 +1533,25 @@
     </section>
 
   </main>
+
+  @if (workspaceTrustPromptOpen && workspace) {
+    <section class="workspace-trust-modal" role="dialog" aria-modal="true" aria-label="Trust workspace">
+      <article>
+        <span class="mono tiny">Local Folder</span>
+        <h2>Trust this workspace?</h2>
+        <p>
+          <b>{{ workspace.name }}</b>
+          <small>{{ workspace.rootPath }}</small>
+        </p>
+        <ul>
+          <li>Read-only preview is available without trust.</li>
+          <li>Terminal, Run, Git writes, Journal, Recovery, and Save need trust.</li>
+        </ul>
+        <div>
+          <button class="btn ghost" type="button" (click)="keepWorkspaceReadOnly()">Keep Read-only</button>
+          <button class="btn accent" type="button" (click)="trustWorkspaceFromPrompt()">Trust & Enable</button>
+        </div>
+      </article>
+    </section>
+  }
 </div>

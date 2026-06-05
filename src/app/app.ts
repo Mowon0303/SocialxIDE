@@ -39,6 +39,7 @@ type RightPanel = 'contributors' | 'files' | 'git' | 'settings';
 type ConsolePanel = 'terminal' | 'problems' | 'output';
 type EditorDensity = 'compact' | 'comfortable';
 type RailResizeTarget = 'workspace' | 'explorer';
+type FilesAction = 'open-folder' | 'resume-workspace' | 'trust-workspace' | 'new-file' | 'review' | 'duplicate' | 'rename' | 'delete' | 'assist';
 type JournalKindFilter = 'all' | JournalEntry['kind'];
 type JournalWriteStatus = 'saved' | 'refresh-failed' | 'write-failed' | 'skipped';
 
@@ -150,6 +151,10 @@ export class App implements OnInit, OnDestroy {
   channelDraftName = '';
   channelMenuNotice = '';
   channelDeleteArmed = false;
+  filesActionsMenuOpen = false;
+  workspaceTrustPromptOpen = false;
+  terminalPaneOpen = !this.isDesktop;
+  terminalRequestedAfterTrust = false;
   activeRightPanel: RightPanel = 'files';
   activeConsolePanel: ConsolePanel = 'terminal';
   editorDensity: EditorDensity = 'compact';
@@ -173,6 +178,7 @@ export class App implements OnInit, OnDestroy {
   creatingFile = false;
   newFileName = '';
   terminalCommand = '';
+  private removeOpenTerminalMenuListener?: () => void;
   runShared = false;
   lastRunTarget = 'fib.py';
   lastRunSummary = 'memo hits: 38 · cache size: 41';
@@ -341,6 +347,24 @@ export class App implements OnInit, OnDestroy {
     },
   ];
 
+  readonly homeReadmeFile: IdeFile = {
+    name: 'README.md',
+    path: 'README.md',
+    lang: 'text',
+    status: 'saved',
+    builtIn: true,
+    lines: [
+      '# Codeyo',
+      '',
+      'No folder is open.',
+      '',
+      'Open a local folder to start editing workspace files.',
+      'Choose Trust in the workspace prompt when you want Terminal, Run, Git, Journal, and file writes enabled.',
+      '',
+      'Until a folder is opened, this page is a read-only home buffer.',
+    ],
+  };
+
   constructor(private readonly changeDetector: ChangeDetectorRef) {
     this.loadStoredEditorDensity();
     this.loadStoredEditorFontSize();
@@ -354,6 +378,9 @@ export class App implements OnInit, OnDestroy {
       this.removeFileChangeListener = window.codeyo?.files.onChanged((change) => {
         void this.handleWorkspaceFileChange(change);
       });
+      this.removeOpenTerminalMenuListener = window.codeyo?.appMenu?.onOpenTerminal(() => {
+        this.openTerminalFromMenu();
+      });
       void this.loadRecentWorkspaceHint();
     }
   }
@@ -361,9 +388,21 @@ export class App implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.clearWorkspaceTimers();
     this.removeFileChangeListener?.();
+    this.removeOpenTerminalMenuListener?.();
+  }
+
+  get homeMode(): boolean {
+    return this.isDesktop && !this.workspace;
+  }
+
+  get visibleIdeFiles(): IdeFile[] {
+    return this.homeMode ? [this.homeReadmeFile] : this.ideFiles;
   }
 
   get activeIdeFile(): IdeFile {
+    if (this.homeMode) {
+      return this.homeReadmeFile;
+    }
     return this.ideFiles.find((file) => file.path === this.activeIdePath) ?? this.ideFiles[0];
   }
 
@@ -584,10 +623,72 @@ export class App implements OnInit, OnDestroy {
 
   get filteredIdeFiles(): IdeFile[] {
     const query = this.fileQuery.trim().toLowerCase();
+    const files = this.visibleIdeFiles;
     return query
-      ? this.ideFiles.filter((file) =>
+      ? files.filter((file) =>
           file.name.toLowerCase().includes(query) || file.path.toLowerCase().includes(query))
-      : this.ideFiles;
+      : files;
+  }
+
+  get explorerRootName(): string {
+    if (this.homeMode) {
+      return 'NO FOLDER';
+    }
+    return (this.workspace?.name || 'atelier-ide').toUpperCase();
+  }
+
+  explorerFileIcon(file: IdeFile): string {
+    if (/\.tsx?$/i.test(file.name)) {
+      return 'TS';
+    }
+    if (/\.cjs$|\.mjs$|\.jsx?$/.test(file.name)) {
+      return 'JS';
+    }
+    if (/\.css$/i.test(file.name)) {
+      return '#';
+    }
+    if (/\.html$/i.test(file.name)) {
+      return '<>';
+    }
+    if (/\.md$/i.test(file.name)) {
+      return 'MD';
+    }
+    if (/\.py$/i.test(file.name)) {
+      return 'PY';
+    }
+    if (file.lang === 'cpp') {
+      return 'C++';
+    }
+    return 'TXT';
+  }
+
+  explorerFileStatus(file: IdeFile): string {
+    if (file.missingOnDisk) {
+      return '!';
+    }
+    if (file.status === 'saved') {
+      return '';
+    }
+    return file.status === 'new' ? 'U' : 'M';
+  }
+
+  explorerFileIconClass(file: IdeFile): string {
+    if (/\.html$/i.test(file.name)) {
+      return 'html';
+    }
+    if (/\.css$/i.test(file.name)) {
+      return 'css';
+    }
+    if (/\.md$/i.test(file.name)) {
+      return 'markdown';
+    }
+    if (/\.py$/i.test(file.name)) {
+      return 'python';
+    }
+    if (file.lang === 'cpp') {
+      return 'cpp';
+    }
+    return 'script';
   }
 
   private rebuildExplorerTree(): void {
@@ -610,7 +711,7 @@ export class App implements OnInit, OnDestroy {
       kind: 'folder',
       children: new Map<string, ExplorerTreeNode>(),
     };
-    for (const file of this.ideFiles) {
+    for (const file of this.visibleIdeFiles) {
       this.addExplorerFile(root, file);
     }
     this.explorerTreeEntries = this.flattenExplorerChildren(root.children, 1);
@@ -630,7 +731,7 @@ export class App implements OnInit, OnDestroy {
 
   get quickOpenResults(): IdeFile[] {
     const query = this.quickOpenQuery.trim().toLowerCase();
-    const ranked = this.ideFiles
+    const ranked = this.visibleIdeFiles
       .map((file) => ({
         file,
         score: query ? this.quickOpenScore(file, query) : this.quickOpenDefaultScore(file),
@@ -642,6 +743,9 @@ export class App implements OnInit, OnDestroy {
   }
 
   get editedFileCount(): number {
+    if (this.homeMode) {
+      return 0;
+    }
     return this.ideFiles.filter((file) => file.status !== 'saved').length;
   }
 
@@ -832,12 +936,12 @@ export class App implements OnInit, OnDestroy {
 
   @HostListener('document:click')
   closeChannelMenu(): void {
-    if (!this.channelMenuOpen) {
-      return;
+    if (this.channelMenuOpen) {
+      this.channelMenuOpen = false;
+      this.channelMenuNotice = '';
+      this.channelDeleteArmed = false;
     }
-    this.channelMenuOpen = false;
-    this.channelMenuNotice = '';
-    this.channelDeleteArmed = false;
+    this.filesActionsMenuOpen = false;
   }
 
   @HostListener('window:keydown.escape')
@@ -1195,6 +1299,46 @@ export class App implements OnInit, OnDestroy {
 
   setRightPanel(panel: RightPanel): void {
     this.activeRightPanel = panel;
+    this.filesActionsMenuOpen = false;
+  }
+
+  toggleFilesActionsMenu(event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.filesActionsMenuOpen = !this.filesActionsMenuOpen;
+  }
+
+  runFilesAction(action: FilesAction): void {
+    this.filesActionsMenuOpen = false;
+    switch (action) {
+      case 'open-folder':
+        void this.openDesktopWorkspace();
+        return;
+      case 'resume-workspace':
+        void this.resumeRecentWorkspace();
+        return;
+      case 'trust-workspace':
+        void this.trustDesktopWorkspace();
+        return;
+      case 'new-file':
+        this.startNewFile();
+        return;
+      case 'review':
+        this.requestPeerReview();
+        return;
+      case 'duplicate':
+        this.duplicateActiveFile();
+        return;
+      case 'rename':
+        this.renameActiveFile();
+        return;
+      case 'delete':
+        void this.deleteActiveFile();
+        return;
+      case 'assist':
+        this.showAssistantPanel();
+        return;
+    }
   }
 
   selectIdeFile(path: string): void {
@@ -1272,7 +1416,49 @@ export class App implements OnInit, OnDestroy {
     this.assistantPanelOpen = true;
   }
 
+  openTerminalFromMenu(): void {
+    if (!this.isDesktop) {
+      this.openConsolePanel('terminal');
+      return;
+    }
+    if (!this.workspace) {
+      this.workspaceNotice = 'OPEN A FOLDER BEFORE STARTING TERMINAL.';
+      this.setRightPanel('settings');
+      this.renderDesktopState();
+      return;
+    }
+    if (!this.workspace.trusted) {
+      this.terminalRequestedAfterTrust = true;
+      this.workspaceTrustPromptOpen = true;
+      this.workspaceNotice = 'TRUST WORKSPACE TO START TERMINAL.';
+      this.renderDesktopState();
+      return;
+    }
+    this.openConsolePanel('terminal');
+  }
+
+  openConsolePanel(panel: ConsolePanel): void {
+    this.terminalPaneOpen = true;
+    this.activeConsolePanel = panel;
+  }
+
+  keepWorkspaceReadOnly(): void {
+    this.terminalRequestedAfterTrust = false;
+    this.workspaceTrustPromptOpen = false;
+    this.workspaceNotice = this.workspace
+      ? `${this.workspace.name} · READ ONLY · TRUST FROM SETTINGS WHEN NEEDED`
+      : 'NO WORKSPACE OPEN.';
+    this.renderDesktopState();
+  }
+
+  async trustWorkspaceFromPrompt(): Promise<void> {
+    await this.trustDesktopWorkspace();
+  }
+
   updateActiveFile(content: string): void {
+    if (this.homeMode) {
+      return;
+    }
     const file = this.activeIdeFile;
     file.lines = content.split('\n');
     this.runDiagnostics = this.runDiagnostics.filter(
@@ -1292,6 +1478,11 @@ export class App implements OnInit, OnDestroy {
   }
 
   saveCurrentFile(): void {
+    if (this.homeMode) {
+      this.workspaceNotice = 'OPEN A FOLDER BEFORE SAVING WORKSPACE FILES.';
+      this.renderDesktopState();
+      return;
+    }
     if (this.isDesktop && this.workspace) {
       void this.saveDesktopDocument();
       return;
@@ -1434,7 +1625,7 @@ export class App implements OnInit, OnDestroy {
   }
 
   setConsolePanel(panel: ConsolePanel): void {
-    this.activeConsolePanel = panel;
+    this.openConsolePanel(panel);
   }
 
   setEditorDensity(density: EditorDensity): void {
@@ -2266,15 +2457,21 @@ export class App implements OnInit, OnDestroy {
     if (!this.workspace || !window.codeyo) {
       return;
     }
+    const openTerminalAfterTrust = this.terminalRequestedAfterTrust;
     try {
       this.workspace = await window.codeyo.workspace.trust(this.workspace.id);
       this.workspaceNotice = `${this.workspace.name} · TRUSTED · EXECUTION ENABLED`;
+      this.workspaceTrustPromptOpen = false;
+      this.terminalRequestedAfterTrust = false;
       const [, journalLoaded, recoveriesLoaded] = await Promise.all([
         this.refreshGit(),
         this.refreshJournal({ noticeOnFailure: false }),
         this.refreshRecoveries({ noticeOnFailure: false }),
       ]);
       this.appendWorkspaceSidecarWarning(journalLoaded, recoveriesLoaded, true);
+      if (openTerminalAfterTrust) {
+        this.openConsolePanel('terminal');
+      }
     } catch (error) {
       this.workspaceNotice = this.desktopError(error, 'COULD NOT TRUST WORKSPACE');
     }
@@ -3118,6 +3315,8 @@ export class App implements OnInit, OnDestroy {
     this.clearWorkspaceTimers();
     this.workspace = workspace;
     this.recentWorkspace = workspace;
+    this.terminalPaneOpen = false;
+    this.terminalRequestedAfterTrust = false;
     this.autoSaveEnabled = this.readWorkspaceBooleanSetting(workspace, 'auto-save', false);
     this.applyWorkspaceToolDefaults(workspace);
     this.expandedExplorerDirs.clear();
@@ -3135,6 +3334,7 @@ export class App implements OnInit, OnDestroy {
     this.workspaceNotice = workspace.trusted
       ? `${workspace.name} · TRUSTED LOCAL WORKSPACE`
       : `${workspace.name} · READ ONLY UNTIL TRUSTED`;
+    this.workspaceTrustPromptOpen = !workspace.trusted;
     await this.loadDesktopFiles();
     this.renderDesktopState();
   }
