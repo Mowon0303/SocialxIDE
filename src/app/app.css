@@ -3935,11 +3935,21 @@ mark {
 }
 
 .right-rail.files-active .right-tabs {
-  border-width: 0 0 1px;
-  border-color: var(--el-hairline);
-  border-radius: 0;
-  height: 32px;
-  margin: 0;
+  border-color: var(--el-hairline-strong);
+  border-radius: 8px;
+  border-width: 1px;
+  height: 34px;
+  margin: 12px 10px;
+}
+
+.studio-shell.density-compact .right-rail.files-active .right-tabs {
+  height: 28px;
+  margin: 12px 10px;
+}
+
+.studio-shell.density-comfortable .right-rail.files-active .right-tabs {
+  height: 34px;
+  margin: 12px 10px;
 }
 
 .side-file-system {
