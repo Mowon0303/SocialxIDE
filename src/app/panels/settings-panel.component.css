@@ -1,0 +1,214 @@
+.storage-switch {
+  border: 1.5px solid var(--el-ink);
+  border-radius: 3px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 3px;
+  overflow: hidden;
+}
+
+.storage-switch button {
+  background: var(--el-panel);
+  border: 0;
+  color: var(--el-ink);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 800;
+  height: 29px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.storage-switch button + button {
+  border-left: 1.5px solid var(--el-ink);
+}
+
+.storage-switch button.active {
+  background: var(--el-ink);
+  color: var(--el-amber);
+}
+
+.density-settings h3 {
+  font-size: 22px;
+}
+
+.font-settings {
+  gap: 9px;
+}
+
+.font-size-control {
+  align-items: center;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: 30px minmax(0, 1fr) 50px 30px;
+}
+
+.font-size-control button,
+.font-size-input {
+  background: var(--el-panel);
+  border: 1px solid var(--el-hairline-strong);
+  border-radius: 4px;
+  color: var(--el-ink);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 900;
+  height: 26px;
+  letter-spacing: 0.06em;
+}
+
+.font-size-control button {
+  cursor: pointer;
+  padding: 0;
+}
+
+.font-size-control button:hover {
+  background: var(--el-amber-soft);
+}
+
+.font-size-control input[type="range"] {
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  height: 26px;
+  min-width: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.font-size-control input[type="range"]::-webkit-slider-runnable-track {
+  background:
+    linear-gradient(
+      90deg,
+      var(--el-amber-deep) 0 var(--font-size-progress, 16.67%),
+      rgba(26, 26, 26, 0.18) var(--font-size-progress, 16.67%) 100%
+    );
+  border: 1px solid var(--el-hairline-strong);
+  border-radius: 999px;
+  height: 6px;
+}
+
+.font-size-control input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  background: var(--el-panel);
+  border: 2px solid var(--el-amber-deep);
+  border-radius: 50%;
+  box-shadow: 0 1px 0 rgba(26, 26, 26, 0.2);
+  height: 16px;
+  margin-top: -6px;
+  width: 16px;
+}
+
+.font-size-control input[type="range"]:focus-visible {
+  outline: 2px solid var(--el-amber-deep);
+  outline-offset: 3px;
+}
+
+.font-size-control input[type="range"]::-moz-range-track {
+  background: rgba(26, 26, 26, 0.18);
+  border: 1px solid var(--el-hairline-strong);
+  border-radius: 999px;
+  height: 6px;
+}
+
+.font-size-control input[type="range"]::-moz-range-progress {
+  background: var(--el-amber-deep);
+  border-radius: 999px;
+  height: 6px;
+}
+
+.font-size-control input[type="range"]::-moz-range-thumb {
+  background: var(--el-panel);
+  border: 2px solid var(--el-amber-deep);
+  border-radius: 50%;
+  height: 12px;
+  width: 12px;
+}
+
+.font-size-input {
+  padding: 0 4px;
+  text-align: center;
+}
+
+.font-size-meta {
+  color: var(--el-ink-3);
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: 900;
+  justify-content: space-between;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.settings-select {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-select span {
+  color: var(--el-ink-2);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.settings-select select {
+  appearance: none;
+  background: var(--el-panel);
+  border: 1px solid var(--el-hairline-strong);
+  border-radius: 4px;
+  color: var(--el-ink);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 900;
+  min-height: 34px;
+  padding: 0 34px 0 10px;
+  text-transform: uppercase;
+  width: 100%;
+}
+
+.settings-select select:focus-visible {
+  outline: 2px solid var(--el-amber-deep);
+  outline-offset: 2px;
+}
+
+.theme-settings {
+  gap: 10px;
+}
+
+.theme-preview {
+  align-items: center;
+  border: 1px solid var(--el-hairline);
+  border-radius: 4px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-height: 34px;
+  padding: 7px 9px;
+}
+
+.theme-preview span {
+  color: var(--el-ink);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.theme-swatches {
+  display: flex;
+  gap: 4px;
+}
+
+.theme-swatches i {
+  border: 1px solid rgba(26, 26, 26, 0.32);
+  border-radius: 50%;
+  display: block;
+  height: 14px;
+  width: 14px;
+}

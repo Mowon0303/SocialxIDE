@@ -4,7 +4,9 @@ Codeyo is a local-first desktop IDE built with Angular, Electron, CodeMirror, xt
 
 ## v0.1 Scope
 
-Codeyo v0.1 is a personal Desktop Social IDE. It is intentionally local-first and single-user: no accounts, cloud sync, real DM, realtime collaboration, model AI, LSP, debugger, CMake, extension marketplace, or remote development.
+Codeyo v0.1 is a personal Desktop Social IDE. It is intentionally local-first and single-user: no accounts, cloud sync, real DM, realtime collaboration, model AI, debugger, CMake, extension marketplace, or remote development.
+
+The local editor includes Python and C++ language assistance. Python uses bundled Pyright. C++ uses a system `clangd` when available and reports a missing-tool state when it is not on `PATH`. Spell check covers Markdown plus comments and strings in code. Editor font, font size, density, and theme are local appearance settings.
 
 Unsaved desktop buffers block quit by default. Codeyo writes recovery copies before showing the quit prompt and only tears down terminal sessions and workspace watchers after quit is actually committed.
 Portable `.codeyo/` journal export is bounded to Codeyo's import size limit; older history is trimmed before writing a payload that the app could not import later.
@@ -29,6 +31,8 @@ Run the Angular app in a browser:
 ```bash
 npm start
 ```
+
+Browser development mode is a renderer preview. It does not provide the full Electron desktop API, so real terminal, trusted workspace file operations, LSP process management, runner behavior, Git actions, and recovery persistence must be verified in Electron.
 
 Run Electron against the current desktop build:
 
@@ -72,6 +76,7 @@ node --check electron/gitignore-policy.cjs
 node --check electron/git-output-policy.cjs
 node --check electron/generate-icons.cjs
 node --check electron/journal-metadata-policy.cjs
+node --check electron/language-service.cjs
 node --check electron/notarization-policy.cjs
 node --check electron/portable-storage-policy.cjs
 node --check electron/verify-mac-release.cjs
@@ -147,7 +152,7 @@ npm run desktop:verify:v0.1
 
 On macOS this runs syntax checks, backend checks, local smoke, unit tests, production build, DMG build, packaged app startup smoke, and mounted-DMG release verification. Set `CODEYO_REQUIRE_NOTARIZATION=1` to require notarization credential preflight before packaging and stapled DMG validation after packaging.
 
-After a full verification gate, Codeyo writes and verifies a machine-readable release manifest under `release/Codeyo-<version>-<platform>-<arch>.manifest.json` with artifact sizes and SHA256 checksums. It also writes `release/Codeyo-<version>-v0.1-readiness.json`, which separates local automation pass/fail state from external release blockers such as macOS notarization, Windows x64 machine testing, and sustained real-project dogfood. The readiness report embeds the current release artifact binding, including artifact path, artifact SHA256, manifest path, manifest SHA256, and verification entries. It also blocks local readiness when release source inputs are newer than the manifest, which means the full v0.1 gate must be rerun after code or packaging changes.
+After a full verification gate, Codeyo writes and verifies a machine-readable release manifest under `release/Codeyo-<version>-<platform>-<arch>.manifest.json` with artifact sizes and SHA256 checksums. It also writes `release/Codeyo-<version>-v0.1-readiness.json`, which separates local automation pass/fail state from external release blockers such as macOS notarization, Windows x64 machine testing, and sustained real-project dogfood. The readiness report embeds the current release artifact binding, including artifact path, artifact SHA256, manifest path, manifest SHA256, and verification entries. It also blocks local readiness when release source inputs are newer than the manifest, which means the full v0.1 gate must be rerun after code or packaging changes. Do not hand-edit release readiness or manifest files; regenerate them through the full gate.
 
 ## Desktop Packaging
 

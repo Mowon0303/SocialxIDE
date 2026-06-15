@@ -30,6 +30,16 @@ const trustedWorkspaceRequiredChannels = Object.freeze([
   'terminal:kill',
   'runner:run',
   'runner:save-profile',
+  'language:status',
+  'language:open-document',
+  'language:change-document',
+  'language:close-document',
+  'language:completion',
+  'language:hover',
+  'language:definition',
+  'language:rename-symbol',
+  'language:code-actions',
+  'language:format-document',
   'git:status',
   'git:branches',
   'git:staged-summary',
@@ -51,6 +61,8 @@ const rendererSubscribedChannels = Object.freeze([
   'menu:open-terminal',
   'terminal:data',
   'terminal:exit',
+  'language:diagnostics',
+  'language:status-changed',
 ]);
 
 const destructiveFileChannels = new Set([
@@ -69,6 +81,15 @@ const dangerousExactChannels = new Set([
   ...destructiveFileChannels,
   'runner:run',
   'runner:save-profile',
+  'language:open-document',
+  'language:change-document',
+  'language:close-document',
+  'language:completion',
+  'language:hover',
+  'language:definition',
+  'language:rename-symbol',
+  'language:code-actions',
+  'language:format-document',
   'journal:add',
   'journal:snapshot',
   'settings:storage-mode',
@@ -96,7 +117,8 @@ function isTrustedWorkspaceRequiredChannel(channel) {
 function isDangerousIpcChannel(channel) {
   return dangerousExactChannels.has(channel)
     || channel.startsWith('terminal:')
-    || channel.startsWith('git:');
+    || channel.startsWith('git:')
+    || channel.startsWith('language:');
 }
 
 function assertIpcTrustPolicyComplete(registeredChannels) {

@@ -11,6 +11,15 @@ const {
 } = require('./path-policy.cjs');
 const { cppCompileSourceFiles } = require('./cpp-run-policy.cjs');
 const { renameWorkspaceFile } = require('./file-operations.cjs');
+const {
+  executableOnPath,
+  normalizeCompletionResult,
+  normalizeDefinitionResult,
+  normalizeLspDiagnostics,
+  positionInRegion,
+  resolveLanguageServerCommand,
+  sanitizeSpellRanges,
+} = require('./language-service.cjs');
 const { normalizeGitAction, permittedGitActionTypes } = require('./git-action-policy.cjs');
 const {
   assertGitPatchPayload,
@@ -860,6 +869,94 @@ test('tool command policy rejects inline shell syntax while preserving executabl
   assert.throws(() => sanitizeToolCheck({ id: 'node', label: 'Node', command: 'node' }), /not permitted/);
 });
 
+test('language service resolves bundled Pyright and reports missing clangd without crashing', () => {
+  const pythonCommand = resolveLanguageServerCommand('python');
+  assert.equal(pythonCommand.available, true);
+  assert.equal(pythonCommand.label, 'Pyright');
+  assert.match(pythonCommand.args[0], /pyright[/\\]langserver\.index\.js$/);
+
+  const fakeProcess = { ...process, env: { PATH: path.join(os.tmpdir(), 'missing-codeyo-clangd') } };
+  const clangdCommand = resolveLanguageServerCommand('cpp', {
+    fsApi: fs,
+    pathApi: path,
+    processApi: fakeProcess,
+  });
+  assert.equal(clangdCommand.available, false);
+  assert.equal(clangdCommand.label, 'clangd');
+  assert.equal(executableOnPath('definitely-missing-codeyo-tool', { fsApi: fs, pathApi: path, processApi: fakeProcess }), false);
+});
+
+test('language service normalizes LSP payloads for renderer diagnostics and navigation', () => {
+  const root = path.join(os.tmpdir(), 'codeyo-lang-root');
+  const sourcePath = path.join(root, 'src', 'main.py');
+  const diagnostic = normalizeLspDiagnostics([{
+    range: {
+      start: { line: 2, character: 4 },
+      end: { line: 2, character: 11 },
+    },
+    severity: 1,
+    code: 'reportUndefinedVariable',
+    message: 'Unknown name',
+  }], 'src/main.py')[0];
+  assert.deepEqual(diagnostic, {
+    path: 'src/main.py',
+    line: 3,
+    column: 5,
+    endLine: 3,
+    endColumn: 12,
+    severity: 'error',
+    source: 'lsp',
+    code: 'reportUndefinedVariable',
+    message: 'Unknown name',
+  });
+
+  const definitions = normalizeDefinitionResult([{
+    uri: new URL(`file://${sourcePath}`).toString(),
+    range: {
+      start: { line: 0, character: 2 },
+      end: { line: 0, character: 5 },
+    },
+  }], root, path);
+  assert.deepEqual(definitions, [{
+    path: 'src/main.py',
+    line: 1,
+    column: 3,
+    endLine: 1,
+    endColumn: 6,
+  }]);
+
+  const completions = normalizeCompletionResult({
+    items: [{ label: 'print', kind: 3, detail: 'builtins', documentation: 'Write text' }],
+  });
+  assert.deepEqual(completions, [{
+    label: 'print',
+    detail: 'builtins',
+    info: 'Write text',
+    kind: 'function',
+    apply: undefined,
+  }]);
+});
+
+test('language service maps spell issue offsets back into original document ranges', () => {
+  const region = {
+    startLine: 10,
+    startColumn: 5,
+    endLine: 11,
+    endColumn: 8,
+    text: 'first\nrecieve',
+  };
+  assert.deepEqual(positionInRegion(region, 0), { line: 10, column: 5 });
+  assert.deepEqual(positionInRegion(region, 6), { line: 11, column: 1 });
+  assert.deepEqual(positionInRegion(region, 13), { line: 11, column: 8 });
+
+  const ranges = sanitizeSpellRanges([
+    { startLine: 1, startColumn: 2, endLine: 1, endColumn: 9, text: 'recieve' },
+    { startLine: 2, startColumn: 1, endLine: 2, endColumn: 1, text: '' },
+  ]);
+  assert.equal(ranges.length, 1);
+  assert.equal(ranges[0].text, 'recieve');
+});
+
 test('IPC trust policy classifies every main-process channel', () => {
   const mainSource = fs.readFileSync(path.join(__dirname, 'main.cjs'), 'utf8');
   const registeredChannels = [...mainSource.matchAll(/handle(?:Sync)?\('([^']+)'/g)]
@@ -881,6 +978,7 @@ test('IPC trust policy classifies every main-process channel', () => {
   assert.ok(rootRecheckedChannels.includes('files:backup-recovery-sync'));
   assert.ok(rootRecheckedChannels.includes('terminal:create'));
   assert.ok(rootRecheckedChannels.includes('runner:run'));
+  assert.ok(rootRecheckedChannels.includes('language:completion'));
   assert.ok(rootRecheckedChannels.includes('git:action'));
   assert.ok(rootRecheckedChannels.includes('journal:snapshot'));
   assert.ok(rootRecheckedChannels.includes('environment:check-tools'));
@@ -908,8 +1006,22 @@ test('preload IPC surface matches main handlers and renderer events', () => {
 
   assert.ok(surface.requested.includes('files:backup-recovery-sync'));
   assert.ok(surface.requested.includes('git:apply-patch'));
-  assert.deepEqual(surface.subscribed, ['files:changed', 'menu:open-terminal', 'terminal:data', 'terminal:exit']);
-  assert.deepEqual(surface.published, ['files:changed', 'menu:open-terminal', 'terminal:data', 'terminal:exit']);
+  assert.deepEqual(surface.subscribed, [
+    'files:changed',
+    'language:diagnostics',
+    'language:status-changed',
+    'menu:open-terminal',
+    'terminal:data',
+    'terminal:exit',
+  ]);
+  assert.deepEqual(surface.published, [
+    'files:changed',
+    'language:diagnostics',
+    'language:status-changed',
+    'menu:open-terminal',
+    'terminal:data',
+    'terminal:exit',
+  ]);
   assert.throws(
     () => assertPreloadIpcSurfaceComplete({
       registeredChannels,

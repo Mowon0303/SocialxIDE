@@ -1,0 +1,181 @@
+<section class="git-panel" data-testid="git-panel">
+  <div class="section-label tight"><span>§09</span><b>Git Changes</b><i></i></div>
+  <p class="git-notice" data-testid="git-notice">{{ gitNotice }}</p>
+  @if (workspace?.trusted && gitStatus) {
+    <div class="git-branch">
+      <b>{{ gitStatus.branch }}</b>
+      <span>↑ {{ gitStatus.ahead }} · ↓ {{ gitStatus.behind }}</span>
+    </div>
+    @if (gitBranches.length > 0) {
+      <div class="git-checkout">
+        <label>
+          <span>Checkout Branch</span>
+          <select aria-label="Checkout branch" [value]="selectedBranch" (change)="updateSelectedBranch.emit($event)">
+            @for (branch of gitBranches; track branch) {
+              <option [value]="branch">{{ branch }}</option>
+            }
+          </select>
+        </label>
+        <button
+          class="btn ghost"
+          type="button"
+          [disabled]="gitBusy || selectedBranch === gitStatus.branch"
+          (click)="switchBranch.emit()"
+        >
+          Switch
+        </button>
+        <button
+          class="danger-action"
+          type="button"
+          [disabled]="gitBusy || !canDeleteSelectedBranch"
+          (click)="deleteSelectedBranch.emit()"
+        >
+          Delete
+        </button>
+      </div>
+    }
+    <div class="git-change-totals">
+      <span><b>{{ stagedGitFiles.length }}</b> Staged <em>+{{ gitStagedSummary.additions }} / -{{ gitStagedSummary.deletions }}</em></span>
+      <span><b>{{ unstagedGitFiles.length }}</b> Unstaged</span>
+    </div>
+    <div class="git-files">
+      @if (stagedGitFiles.length > 0) {
+        <h4>Staged For Commit</h4>
+        @for (file of stagedGitFiles; track file.path) {
+          <article [attr.data-testid]="'git-staged-file-' + file.path" [class.comparing]="gitComparison?.path === file.path && gitComparison?.mode === 'staged'">
+            <span>{{ file.index }}</span>
+            <b>{{ file.originalPath ? file.originalPath + ' → ' : '' }}{{ file.path }}</b>
+            <button type="button" [attr.data-testid]="'git-staged-compare-' + file.path" [disabled]="gitBusy || gitCompareBusy" (click)="showGitDiff.emit({ path: file.path, mode: 'staged' })">Compare</button>
+            <button type="button" [attr.data-testid]="'git-unstage-' + file.path" [disabled]="gitBusy" (click)="gitAction.emit({ type: 'unstage', path: file.path, originalPath: file.originalPath })">Unstage</button>
+          </article>
+        }
+      }
+      @if (unstagedGitFiles.length > 0) {
+        <h4>Working Tree</h4>
+        @for (file of unstagedGitFiles; track file.path) {
+          <article [attr.data-testid]="'git-unstaged-file-' + file.path" [class.comparing]="gitComparison?.path === file.path && gitComparison?.mode === 'unstaged'">
+            <span>{{ file.workingTree }}</span>
+            <b>{{ file.originalPath ? file.originalPath + ' → ' : '' }}{{ file.path }}</b>
+            <button type="button" [attr.data-testid]="'git-unstaged-compare-' + file.path" [disabled]="gitBusy || gitCompareBusy" (click)="showGitDiff.emit({ path: file.path, mode: 'unstaged' })">Compare</button>
+            <button type="button" [attr.data-testid]="'git-stage-' + file.path" [disabled]="gitBusy" (click)="gitAction.emit({ type: 'stage', path: file.path, originalPath: file.originalPath })">Stage</button>
+            @if (file.workingTree !== '?') {
+              <button class="danger-action" type="button" [attr.data-testid]="'git-discard-' + file.path" [disabled]="gitBusy" (click)="discardGitFile.emit(file.path)">Discard</button>
+            }
+          </article>
+        }
+      }
+      @if (stagedGitFiles.length === 0 && unstagedGitFiles.length === 0) {
+        <p class="git-clean">WORKTREE CLEAN</p>
+      }
+    </div>
+    <section class="git-commit-desk">
+      <div class="section-label tight"><span>§10</span><b>Commit Desk</b><i></i></div>
+      <form class="git-commit" (submit)="reviewCommit.emit(); $event.preventDefault()">
+        <input
+          type="text"
+          aria-label="Commit message"
+          placeholder="COMMIT MESSAGE"
+          [value]="commitMessage"
+          (input)="updateCommitMessage.emit($event)"
+        />
+        @if (recentRunResults.length > 0) {
+          <label class="git-run-evidence">
+            <span>Run Evidence</span>
+            <select
+              aria-label="Attach run evidence to commit"
+              [value]="selectedCommitRunResultId"
+              (change)="updateSelectedCommitRun.emit($event)"
+            >
+              <option value="">NO RUN EVIDENCE</option>
+              @for (result of recentRunResults; track result.id) {
+                <option [value]="result.id">{{ runEvidenceLabel(result) }}</option>
+              }
+            </select>
+          </label>
+        }
+        <button class="btn primary" type="submit" [disabled]="gitBusy || !canReviewCommit">Review</button>
+      </form>
+      @if (commitReviewOpen) {
+        <article class="git-commit-review">
+          <span>Ready To Commit</span>
+          <p>“{{ commitMessage }}”</p>
+          <b>{{ gitStagedSummary.files.length }} files · +{{ gitStagedSummary.additions }} / -{{ gitStagedSummary.deletions }}</b>
+          @for (file of gitStagedSummary.files; track file.path) {
+            <small>{{ file.path }} · {{ file.binary ? 'binary' : '+' + file.additions + ' / -' + file.deletions }}</small>
+          }
+          <div>
+            <button class="btn ghost" type="button" (click)="cancelCommitReview.emit()">Cancel</button>
+            <button class="btn accent" type="button" [disabled]="gitBusy" (click)="commitReviewedChanges.emit()">Commit Staged</button>
+          </div>
+        </article>
+      }
+    </section>
+    <form class="git-branch-form" (submit)="createBranch.emit(); $event.preventDefault()">
+      <input
+        type="text"
+        aria-label="New branch name"
+        placeholder="NEW BRANCH NAME"
+        [value]="branchName"
+        (input)="updateBranchName.emit($event)"
+      />
+      <button class="btn ghost" type="submit" [disabled]="gitBusy">New Branch</button>
+    </form>
+    <div class="git-remote-actions">
+      <button class="btn ghost" type="button" [disabled]="gitBusy" (click)="pullRemote.emit()">Pull</button>
+      <button class="btn accent" type="button" [disabled]="gitBusy" (click)="pushRemote.emit()">
+        {{ gitBusy ? 'Working...' : 'Push' }}
+      </button>
+    </div>
+    <section class="git-history">
+      <div class="section-label tight"><span>§11</span><b>History</b><i></i></div>
+      <input
+        class="git-history-search"
+        type="text"
+        aria-label="Filter commit history"
+        placeholder="FILTER BY SHA, AUTHOR, OR MESSAGE"
+        [value]="gitHistoryQuery"
+        (input)="updateGitHistoryQuery.emit($event)"
+      />
+      <div class="git-history-list">
+        @for (commit of filteredGitHistory; track commit.revision) {
+          <button
+            class="git-history-row"
+            type="button"
+            [attr.data-testid]="'git-history-row-' + commit.shortRevision"
+            [class.active]="gitHistoryDetailRevision === commit.revision"
+            (click)="openGitHistoryCommit.emit(commit)"
+          >
+            <span>{{ commit.shortRevision }}</span>
+            <b>{{ commit.subject }}</b>
+            <small>{{ commit.author }} · {{ commit.authoredAt.slice(0, 10) }}</small>
+          </button>
+        } @empty {
+          <p class="git-history-empty">{{ gitHistory.length ? 'NO COMMITS MATCH FILTER.' : 'NO COMMITS YET.' }}</p>
+        }
+      </div>
+    </section>
+  } @else if (!workspace) {
+    <codeyo-empty-state
+      label="Git"
+      title="No workspace"
+      message="Open a folder before using Git compare, staging, commit review, or history."
+      details="Browser preview cannot inspect a real repository."
+    />
+  } @else if (!workspace.trusted) {
+    <codeyo-empty-state
+      label="Git"
+      title="Workspace not trusted"
+      message="Trust this folder before Codeyo reads repository state or runs Git commands."
+      [details]="workspace.rootPath"
+      variant="warning"
+    />
+  } @else {
+    <codeyo-empty-state
+      label="Git"
+      title="Git unavailable"
+      [message]="gitNotice || 'Git status is not available for this workspace.'"
+      details="Check that this folder is a Git repository and that Git is available on PATH."
+      variant="warning"
+    />
+  }
+</section>

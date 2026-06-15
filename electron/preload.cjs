@@ -54,6 +54,21 @@ contextBridge.exposeInMainWorld('codeyo', {
     history: (workspaceId) => invoke('runner:history', { workspaceId }),
     getResult: (workspaceId, runResultId) => invoke('runner:get-result', { workspaceId, runResultId }),
   },
+  language: {
+    status: (workspaceId) => invoke('language:status', { workspaceId }),
+    openDocument: (workspaceId, document) => invoke('language:open-document', { workspaceId, document }),
+    changeDocument: (workspaceId, document) => invoke('language:change-document', { workspaceId, document }),
+    closeDocument: (workspaceId, document) => invoke('language:close-document', { workspaceId, document }),
+    completion: (workspaceId, request) => invoke('language:completion', { workspaceId, request }),
+    hover: (workspaceId, request) => invoke('language:hover', { workspaceId, request }),
+    definition: (workspaceId, request) => invoke('language:definition', { workspaceId, request }),
+    renameSymbol: (workspaceId, request, newName) =>
+      invoke('language:rename-symbol', { workspaceId, request, newName }),
+    codeActions: (workspaceId, request) => invoke('language:code-actions', { workspaceId, request }),
+    formatDocument: (workspaceId, document) => invoke('language:format-document', { workspaceId, document }),
+    onDiagnostics: (handler) => on('language:diagnostics', handler),
+    onStatus: (handler) => on('language:status-changed', handler),
+  },
   git: {
     status: (workspaceId) => invoke('git:status', { workspaceId }),
     branches: (workspaceId) => invoke('git:branches', { workspaceId }),

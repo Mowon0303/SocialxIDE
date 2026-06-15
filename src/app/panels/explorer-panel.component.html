@@ -1,0 +1,198 @@
+<section class="side-file-system" (contextmenu)="openExplorerContextMenu($event)">
+  <div class="explorer-heading">
+    <span>Explorer</span>
+    <button
+      class="explorer-actions-toggle"
+      type="button"
+      [class.active]="filesActionsMenuOpen"
+      aria-label="Explorer actions"
+      [attr.aria-expanded]="filesActionsMenuOpen"
+      (click)="toggleActionsMenu.emit($event)"
+    >
+      ...
+    </button>
+    @if (filesActionsMenuOpen) {
+      <div
+        class="explorer-actions-menu"
+        (click)="$event.stopPropagation()"
+        (contextmenu)="$event.preventDefault(); $event.stopPropagation()"
+      >
+        @if (isDesktop) {
+          <button type="button" (click)="triggerAction('open-folder')">Open Folder</button>
+        }
+        @if (isDesktop && !workspace && recentWorkspace) {
+          <button type="button" (click)="triggerAction('resume-workspace')">Resume Workspace</button>
+        }
+        @if (isDesktop && workspace && !workspace.trusted) {
+          <button type="button" (click)="triggerAction('trust-workspace')">Trust Workspace</button>
+        }
+        @if (!homeMode) {
+          <button type="button" (click)="triggerAction('new-file')">New File</button>
+          <span></span>
+          <button type="button" (click)="triggerAction('review')">
+            {{ isDesktop && activeBufferRunEvidence ? 'Review + Run Evidence' : 'Request Review' }}
+          </button>
+          <button type="button" (click)="triggerAction('duplicate')">Duplicate</button>
+          @if (canDeleteActiveFile && (!isDesktop || workspace?.trusted)) {
+            <button type="button" (click)="triggerAction('rename')">Rename</button>
+          }
+          <button type="button" (click)="triggerAction('copy-path')">Copy Path</button>
+          <button type="button" (click)="triggerAction('reveal-active-file')">Reveal Active File</button>
+          @if (canDeleteActiveFile) {
+            <button class="danger-action" type="button" (click)="triggerAction('delete')">Delete</button>
+          }
+          @if (!assistantPanelOpen) {
+            <button type="button" (click)="triggerAction('assist')">Show Assist</button>
+          }
+        }
+      </div>
+    }
+  </div>
+
+  <div class="vscode-tree" (contextmenu)="openExplorerContextMenu($event)">
+    <button
+      class="tree-node folder root open"
+      type="button"
+      (click)="toggleWorkspace.emit()"
+      (contextmenu)="openExplorerContextMenu($event)"
+    >
+      <span class="tree-caret">{{ workspaceExpanded ? '⌄' : '›' }}</span>
+      <span class="tree-label">{{ explorerRootName }}</span>
+    </button>
+    @if (workspaceExpanded) {
+      @for (entry of explorerTreeEntries; track entry.id) {
+        @if (entry.kind === 'folder') {
+          <button
+            class="tree-node folder child"
+            type="button"
+            [class.open]="entry.expanded"
+            [style.padding-left.px]="treeNodePadding(entry.depth)"
+            (click)="toggleFolder.emit(entry.path)"
+            (contextmenu)="openExplorerContextMenu($event)"
+          >
+            <span class="tree-caret">{{ entry.expanded ? '⌄' : '›' }}</span>
+            <span class="tree-label">{{ entry.name }}</span>
+          </button>
+        } @else if (entry.file) {
+          @if (renamingFilePath === entry.file.path) {
+            <form
+              class="rename-file-row"
+              [style.padding-left.px]="treeNodePadding(entry.depth)"
+              (submit)="commitRename.emit(); $event.preventDefault()"
+              (click)="$event.stopPropagation()"
+              (contextmenu)="$event.preventDefault(); $event.stopPropagation()"
+            >
+              <span class="file-glyph" [attr.data-kind]="explorerFileIconClass(entry.file)">
+                {{ explorerFileIcon(entry.file) }}
+              </span>
+              <input
+                type="text"
+                aria-label="Rename file"
+                [value]="renameDraft"
+                (input)="updateRenameDraft.emit($event)"
+                (keydown.escape)="cancelRename.emit(); $event.preventDefault(); $event.stopPropagation()"
+              />
+              <button type="submit">↵</button>
+              <button type="button" (click)="cancelRename.emit()">×</button>
+            </form>
+          } @else {
+          <button
+            class="tree-node file child"
+            type="button"
+            [class.active]="activeIdeFile.path === entry.file.path"
+            [style.padding-left.px]="treeNodePadding(entry.depth)"
+            [title]="entry.file.path"
+            [attr.data-path]="entry.file.path"
+            (click)="selectFile.emit(entry.file.path)"
+            (contextmenu)="openFileContextMenu($event, entry.file.path)"
+          >
+            <span class="file-glyph" [attr.data-kind]="explorerFileIconClass(entry.file)">
+              {{ explorerFileIcon(entry.file) }}
+            </span>
+            <span class="tree-label">{{ entry.name }}</span>
+            @if (explorerFileStatus(entry.file)) {
+              <small>{{ explorerFileStatus(entry.file) }}</small>
+            }
+          </button>
+          }
+        }
+      }
+
+      @if (explorerTreeEntries.length === 0 && !creatingFile) {
+        <codeyo-empty-state
+          label="Explorer"
+          title="No matching files"
+          message="The current Explorer filter has hidden every editable file."
+          details="Clear the filter to return to the full workspace tree."
+          actionLabel="Clear filter"
+          (action)="clearFilter.emit()"
+        />
+      }
+
+      @if (creatingFile) {
+        <form class="new-file-row" (submit)="createFile.emit(); $event.preventDefault()">
+          <span>+</span>
+          <input
+            type="text"
+            aria-label="New file name"
+            placeholder="src/solution.py"
+            [value]="newFileName"
+            (input)="updateNewFileName.emit($event)"
+          />
+          <button type="submit">↵</button>
+          <button type="button" (click)="cancelNewFile.emit()">×</button>
+        </form>
+      }
+    }
+  </div>
+
+  @if (contextMenuOpen) {
+    <div
+      class="explorer-context-menu"
+      role="menu"
+      [style.left.px]="contextMenuX"
+      [style.top.px]="contextMenuY"
+      (click)="$event.stopPropagation()"
+      (contextmenu)="$event.preventDefault(); $event.stopPropagation()"
+    >
+      <button type="button" role="menuitem" (click)="triggerAction('new-file')">New File</button>
+      <span></span>
+      <button type="button" role="menuitem" (click)="triggerAction('review')">
+        {{ isDesktop && activeBufferRunEvidence ? 'Review + Run Evidence' : 'Request Review' }}
+      </button>
+      <button type="button" role="menuitem" (click)="triggerAction('duplicate')">Duplicate</button>
+      @if (canDeleteActiveFile && (!isDesktop || workspace?.trusted)) {
+        <button type="button" role="menuitem" (click)="triggerAction('rename')">Rename</button>
+      }
+      <button type="button" role="menuitem" (click)="triggerAction('copy-path')">Copy Path</button>
+      <button type="button" role="menuitem" (click)="triggerAction('reveal-active-file')">Reveal Active File</button>
+      @if (canDeleteActiveFile) {
+        <button class="danger-action" type="button" role="menuitem" (click)="triggerAction('delete')">Delete</button>
+      }
+    </div>
+  }
+
+  @if (workspace?.trusted && recoveryBufferCount > 0) {
+    <div class="vscode-outline explorer-recovery">
+      <button class="outline-heading" type="button">
+        <span>⌄</span>
+        <b>Recovery</b>
+        <em>{{ recoveryBufferCount }}</em>
+      </button>
+      @for (buffer of recoveryBuffers; track buffer.filePath) {
+        <div class="recovery-line">
+          <span>{{ buffer.filePath }}</span>
+          <button type="button" (click)="restoreRecovery.emit(buffer)">Restore</button>
+          <button type="button" (click)="discardRecovery.emit(buffer)">Discard</button>
+        </div>
+      }
+    </div>
+  }
+
+  <div class="vscode-outline">
+    <button class="outline-heading" type="button">
+      <span>›</span>
+      <b>Outline</b>
+    </button>
+  </div>
+</section>

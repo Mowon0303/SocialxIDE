@@ -1,6 +1,6 @@
 :host {
   display: grid;
-  grid-template-rows: 29px minmax(0, 1fr);
+  grid-template-rows: 29px 24px minmax(0, 1fr);
   min-height: 0;
   position: relative;
 }
@@ -113,6 +113,38 @@
   padding: 0;
 }
 
+.terminal-status-strip {
+  align-items: center;
+  background: #211f1c;
+  border-bottom: 1px solid rgba(232, 197, 71, 0.42);
+  color: #faeab5;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 10px;
+}
+
+.terminal-status-strip span {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.terminal-status-strip span:first-child {
+  color: #e8c547;
+}
+
+.terminal-status-strip.disabled {
+  opacity: 0.68;
+}
+
 .terminal-session-bar button:disabled {
   cursor: default;
   opacity: 0.45;
@@ -140,7 +172,7 @@
   letter-spacing: 0.08em;
   position: absolute;
   text-transform: uppercase;
-  top: 50px;
+  top: 74px;
   z-index: 2;
 }
 
@@ -156,7 +188,7 @@
   position: absolute;
   right: 10px;
   text-transform: uppercase;
-  top: 36px;
+  top: 60px;
   z-index: 3;
 }
 
@@ -168,6 +200,16 @@
 .terminal-session-bar {
   background: #fffdf8;
   border-bottom: 1px solid rgba(33, 31, 28, 0.28);
+}
+
+.terminal-status-strip {
+  background: #fffdf8;
+  border-bottom: 1px solid rgba(33, 31, 28, 0.16);
+  color: #4a433b;
+}
+
+.terminal-status-strip span:first-child {
+  color: #b89a2c;
 }
 
 .terminal-session-bar button {
