@@ -11,6 +11,7 @@
     "desktop:build": "ng build",
     "desktop:test:backend": "node electron/test-backend.cjs && node electron/test-release-evidence.cjs",
     "desktop:test:release-evidence": "node electron/test-release-evidence.cjs",
+    "desktop:test:lsp-live": "node electron/test-language-service-live.cjs",
     "desktop:smoke:local": "node electron/smoke-local-project.cjs",
     "desktop:smoke:app": "node electron/smoke-packaged-app.cjs",
     "desktop:e2e": "npm run build && playwright test --config playwright.config.ts",
