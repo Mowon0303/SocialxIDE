@@ -128,6 +128,12 @@ Run only the release evidence policy checks:
 npm run desktop:test:release-evidence
 ```
 
+Run the live language-server integration checks. This spawns the real bundled Pyright and a system `clangd` in a throwaway workspace and drives format, rename, and code actions end to end. It is not part of `desktop:test:backend` because it starts real servers; missing tools are skipped as passing lines. See `electron/VERIFY-IDE-ACTIONS.md` for this plus the manual Electron UI checklist:
+
+```bash
+npm run desktop:test:lsp-live
+```
+
 Run a local real-project smoke test. It creates a temporary project, runs Python, C++, node-pty, Git hunk stage/unstage/discard, branch/commit/push/pull against a local bare remote, and verifies `.codeyo` portable storage:
 
 ```bash
