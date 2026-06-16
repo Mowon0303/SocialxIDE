@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyTextEdits, positionToOffset } from './language-edits';
+import { applyTextEdits, groupTextEditsByPath, positionToOffset } from './language-edits';
 import { LanguageTextEdit } from './desktop-api';
 
 const edit = (
@@ -65,5 +65,29 @@ describe('applyTextEdits', () => {
     const reversed = applyTextEdits(text, [edit(1, 5, 1, 7, 'BB'), edit(1, 1, 1, 3, 'AA')]);
     expect(forward).toBe('AA--BB');
     expect(reversed).toBe('AA--BB');
+  });
+});
+
+describe('groupTextEditsByPath', () => {
+  const at = (path: string, startColumn: number): LanguageTextEdit => ({
+    path,
+    startLine: 1,
+    startColumn,
+    endLine: 1,
+    endColumn: startColumn,
+    newText: 'x',
+  });
+
+  it('groups edits by their target path, preserving order', () => {
+    const grouped = groupTextEditsByPath([at('a.py', 1), at('b.py', 1), at('a.py', 5)]);
+    expect([...grouped.keys()]).toEqual(['a.py', 'b.py']);
+    expect(grouped.get('a.py')?.map((e) => e.startColumn)).toEqual([1, 5]);
+    expect(grouped.get('b.py')?.length).toBe(1);
+  });
+
+  it('ignores edits without a path and handles an empty list', () => {
+    expect(groupTextEditsByPath([]).size).toBe(0);
+    const grouped = groupTextEditsByPath([{ ...at('', 1) }, at('a.py', 1)]);
+    expect([...grouped.keys()]).toEqual(['a.py']);
   });
 });

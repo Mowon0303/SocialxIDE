@@ -530,6 +530,49 @@
                   <small>1-{{ activeIdeFile.lines.length }} · current {{ editorCursorLine }}:{{ editorCursorColumn }}</small>
                 </section>
               }
+              @if (renameSymbolOpen) {
+                <div class="quick-open-backdrop" (click)="closeRenameSymbol()"></div>
+                <section class="go-to-line-popover" aria-label="Rename symbol" (click)="$event.stopPropagation()">
+                  <header>
+                    <span class="mono tiny">Rename Symbol</span>
+                    <button type="button" (click)="closeRenameSymbol()">×</button>
+                  </header>
+                  <form (submit)="submitRenameSymbol(); $event.preventDefault()">
+                    <input
+                      type="text"
+                      aria-label="New symbol name"
+                      autofocus
+                      placeholder="NEW NAME"
+                      [value]="renameSymbolDraft"
+                      (input)="updateRenameSymbolDraft($event)"
+                      (keydown.escape)="closeRenameSymbol(); $event.preventDefault(); $event.stopPropagation()"
+                    />
+                    <button type="submit">Rename</button>
+                  </form>
+                  <small>at {{ activeIdeFile.path }}:{{ editorCursorLine }}:{{ editorCursorColumn }}</small>
+                </section>
+              }
+              @if (codeActionMenuOpen) {
+                <div class="quick-open-backdrop" (click)="closeCodeActions()"></div>
+                <section class="code-action-popover" aria-label="Code actions" (click)="$event.stopPropagation()">
+                  <header>
+                    <span class="mono tiny">Code Actions</span>
+                    <button type="button" (click)="closeCodeActions()">×</button>
+                  </header>
+                  <nav class="code-action-list" aria-label="Code action results">
+                    @for (action of codeActionItems; track $index) {
+                      <button type="button" (click)="applyCodeAction(action)">
+                        <span>{{ action.title }}</span>
+                        @if (action.kind) {
+                          <small>{{ action.kind }}</small>
+                        }
+                      </button>
+                    } @empty {
+                      <p>No code actions</p>
+                    }
+                  </nav>
+                </section>
+              }
               <div class="ide-plane-grid">
                 <main class="ide-editor">
                   <div class="ide-tabs">
@@ -796,6 +839,8 @@
                           <button type="button" (click)="openGoToLine()">Go Line</button>
                           <button type="button" (click)="goToDefinitionAtCursor()">Go Def</button>
                           <button type="button" (click)="formatActiveDocument()">Format</button>
+                          <button type="button" (click)="openRenameSymbol()">Rename</button>
+                          <button type="button" (click)="requestCodeActions()">Actions</button>
                           <button type="button" [class.active]="shortcutPanelOpen" (click)="toggleShortcutPanel()">Keys</button>
                         </nav>
                       </div>

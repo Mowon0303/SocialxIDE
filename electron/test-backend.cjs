@@ -13,10 +13,12 @@ const { cppCompileSourceFiles } = require('./cpp-run-policy.cjs');
 const { renameWorkspaceFile } = require('./file-operations.cjs');
 const {
   executableOnPath,
+  normalizeCodeActions,
   normalizeCompletionResult,
   normalizeDefinitionResult,
   normalizeLspDiagnostics,
   normalizeTextEdits,
+  normalizeWorkspaceEdit,
   positionInRegion,
   resolveLanguageServerCommand,
   sanitizeSpellRanges,
@@ -979,6 +981,63 @@ test('language service normalizes LSP payloads for renderer diagnostics and navi
     { path: 'src/main.cpp', startLine: 2, startColumn: 1, endLine: 2, endColumn: 10, newText: '  return 0;' },
   ]);
   assert.deepEqual(normalizeTextEdits(null, 'src/main.cpp'), []);
+});
+
+test('language service normalizes workspace edits and code actions for rename and quick-fix', () => {
+  const root = path.join(os.tmpdir(), 'codeyo-edit-root');
+  const mainUri = new URL(`file://${path.join(root, 'src', 'main.py')}`).toString();
+  const utilUri = new URL(`file://${path.join(root, 'src', 'util.py')}`).toString();
+
+  const fromChanges = normalizeWorkspaceEdit({
+    changes: {
+      [mainUri]: [
+        { range: { start: { line: 0, character: 0 }, end: { line: 0, character: 5 } }, newText: 'count' },
+      ],
+      [utilUri]: [
+        { range: { start: { line: 2, character: 1 }, end: { line: 2, character: 6 } }, newText: 'count' },
+      ],
+    },
+  }, root, path);
+  assert.deepEqual(fromChanges, [
+    { path: 'src/main.py', startLine: 1, startColumn: 1, endLine: 1, endColumn: 6, newText: 'count' },
+    { path: 'src/util.py', startLine: 3, startColumn: 2, endLine: 3, endColumn: 7, newText: 'count' },
+  ]);
+
+  const fromDocChanges = normalizeWorkspaceEdit({
+    documentChanges: [
+      {
+        textDocument: { uri: mainUri, version: 1 },
+        edits: [{ range: { start: { line: 1, character: 0 }, end: { line: 1, character: 0 } }, newText: '# fixed\n' }],
+      },
+    ],
+  }, root, path);
+  assert.deepEqual(fromDocChanges, [
+    { path: 'src/main.py', startLine: 2, startColumn: 1, endLine: 2, endColumn: 1, newText: '# fixed\n' },
+  ]);
+
+  assert.deepEqual(normalizeWorkspaceEdit(null, root, path), []);
+
+  const actions = normalizeCodeActions([
+    { title: 'Run command', command: { command: 'do.thing' } },
+    { title: 'Empty edit', edit: { changes: {} } },
+    {
+      title: 'Remove import',
+      kind: 'quickfix',
+      edit: {
+        changes: {
+          [mainUri]: [
+            { range: { start: { line: 0, character: 0 }, end: { line: 1, character: 0 } }, newText: '' },
+          ],
+        },
+      },
+    },
+  ], root, path);
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0].title, 'Remove import');
+  assert.equal(actions[0].kind, 'quickfix');
+  assert.deepEqual(actions[0].edit.edits, [
+    { path: 'src/main.py', startLine: 1, startColumn: 1, endLine: 2, endColumn: 1, newText: '' },
+  ]);
 });
 
 test('language service maps spell issue offsets back into original document ranges', () => {

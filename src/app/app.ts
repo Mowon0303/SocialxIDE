@@ -28,11 +28,15 @@ import {
   GitStatus,
   GitWorkspaceCompareMode,
   JournalEntry,
+  LanguageCodeAction,
+  LanguageCodeActionResult,
   LanguageCompletionResult,
   LanguageDefinitionLocation,
   LanguageFormatResult,
   LanguageHoverResult,
+  LanguageRenameResult,
   LanguageServiceStatus,
+  LanguageWorkspaceEdit,
   LanguageWorkspaceStatus,
   RecoveryBuffer,
   RunProfile,
@@ -56,7 +60,7 @@ import {
   EditorThemeId,
 } from './editor-appearance';
 import { extractSpellCheckRegions } from './spell-regions';
-import { applyTextEdits } from './language-edits';
+import { applyTextEdits, groupTextEditsByPath } from './language-edits';
 import {
   ChannelItem,
   ChannelView,
@@ -171,6 +175,10 @@ export class App implements OnInit, OnDestroy {
   goToLineOpen = false;
   goToLineDraft = '';
   shortcutPanelOpen = false;
+  renameSymbolOpen = false;
+  renameSymbolDraft = '';
+  codeActionMenuOpen = false;
+  codeActionItems: LanguageCodeAction[] = [];
   cppSelectedSources: string[] = [];
   environmentChecks: ToolCheckResult[] = [];
   storageBusy = false;
@@ -2033,6 +2041,18 @@ export class App implements OnInit, OnDestroy {
       return;
     }
 
+    if (this.renameSymbolOpen && key === 'escape') {
+      event.preventDefault();
+      this.closeRenameSymbol();
+      return;
+    }
+
+    if (this.codeActionMenuOpen && key === 'escape') {
+      event.preventDefault();
+      this.closeCodeActions();
+      return;
+    }
+
     if (this.shortcutPanelOpen && key === 'escape') {
       event.preventDefault();
       this.shortcutPanelOpen = false;
@@ -2217,6 +2237,182 @@ export class App implements OnInit, OnDestroy {
       default:
         return (reason || 'UNSUPPORTED').toUpperCase();
     }
+  }
+
+  openRenameSymbol(): void {
+    const file = this.activeIdeFile;
+    if (this.homeMode || !this.workspace?.trusted || !window.codeyo?.language || !this.isTrustedWorkspaceFile(file)) {
+      this.workspaceNotice = 'TRUSTED WORKSPACE FILE REQUIRED FOR RENAME.';
+      this.renderDesktopState();
+      return;
+    }
+    this.closeCodeActions();
+    this.renameSymbolDraft = '';
+    this.renameSymbolOpen = true;
+  }
+
+  updateRenameSymbolDraft(event: Event): void {
+    this.renameSymbolDraft = (event.target as HTMLInputElement).value;
+  }
+
+  closeRenameSymbol(): void {
+    this.renameSymbolOpen = false;
+    this.renameSymbolDraft = '';
+  }
+
+  async submitRenameSymbol(): Promise<void> {
+    const file = this.activeIdeFile;
+    const newName = this.renameSymbolDraft.trim();
+    if (!newName) {
+      this.workspaceNotice = 'RENAME NEEDS A NEW NAME.';
+      this.renderDesktopState();
+      return;
+    }
+    if (!this.workspace?.trusted || !window.codeyo?.language || !this.isTrustedWorkspaceFile(file)) {
+      this.workspaceNotice = 'TRUSTED WORKSPACE FILE REQUIRED FOR RENAME.';
+      this.renderDesktopState();
+      return;
+    }
+    const request = this.languageRequestFor(file, { line: this.editorCursorLine, column: this.editorCursorColumn });
+    let result: LanguageRenameResult;
+    try {
+      result = await window.codeyo.language.renameSymbol(this.workspace.id, request, newName);
+    } catch (error) {
+      this.workspaceNotice = this.desktopError(error, `RENAME FAILED · ${file.path}`);
+      this.renderDesktopState();
+      return;
+    }
+    if (!result.available || !result.edit) {
+      this.workspaceNotice = `RENAME UNAVAILABLE · ${this.languageActionReason(result.reason)} · ${file.path}`;
+      this.renderDesktopState();
+      return;
+    }
+    this.closeRenameSymbol();
+    await this.applyLanguageWorkspaceEdit(result.edit, `RENAMED TO ${newName}`);
+  }
+
+  async requestCodeActions(): Promise<void> {
+    const file = this.activeIdeFile;
+    if (this.homeMode || !this.workspace?.trusted || !window.codeyo?.language || !this.isTrustedWorkspaceFile(file)) {
+      this.workspaceNotice = 'TRUSTED WORKSPACE FILE REQUIRED FOR CODE ACTIONS.';
+      this.renderDesktopState();
+      return;
+    }
+    this.closeRenameSymbol();
+    const request = this.languageRequestFor(file, { line: this.editorCursorLine, column: this.editorCursorColumn });
+    let result: LanguageCodeActionResult;
+    try {
+      result = await window.codeyo.language.codeActions(this.workspace.id, request);
+    } catch (error) {
+      this.workspaceNotice = this.desktopError(error, `CODE ACTIONS FAILED · ${file.path}`);
+      this.renderDesktopState();
+      return;
+    }
+    if (!result.available) {
+      this.workspaceNotice = `CODE ACTIONS UNAVAILABLE · ${this.languageActionReason(result.reason)} · ${file.path}`;
+      this.renderDesktopState();
+      return;
+    }
+    this.codeActionItems = result.actions;
+    if (!this.codeActionItems.length) {
+      this.codeActionMenuOpen = false;
+      this.workspaceNotice = `NO CODE ACTIONS · ${file.path}:${this.editorCursorLine}`;
+      this.renderDesktopState();
+      return;
+    }
+    this.codeActionMenuOpen = true;
+    this.renderDesktopState();
+  }
+
+  closeCodeActions(): void {
+    this.codeActionMenuOpen = false;
+    this.codeActionItems = [];
+  }
+
+  async applyCodeAction(action: LanguageCodeAction): Promise<void> {
+    this.codeActionMenuOpen = false;
+    if (!action?.edit) {
+      this.workspaceNotice = 'CODE ACTION HAS NO APPLICABLE EDIT.';
+      this.renderDesktopState();
+      return;
+    }
+    await this.applyLanguageWorkspaceEdit(action.edit, `APPLIED · ${action.title}`);
+  }
+
+  private languageActionReason(reason?: string): string {
+    switch (reason) {
+      case 'missing-tool':
+        return 'LANGUAGE TOOL NOT FOUND';
+      case 'missing-new-name':
+        return 'NEW NAME REQUIRED';
+      case 'no-rename-edits':
+        return 'NO RENAME LOCATIONS';
+      default:
+        return (reason || 'UNSUPPORTED').toUpperCase();
+    }
+  }
+
+  // Applies a multi-file workspace edit to in-memory buffers and marks every
+  // touched file dirty for the user to review and Save All. Nothing is written
+  // to disk here; clean files are re-read so edits land on the same content the
+  // language server computed them against, while dirty buffers keep their text.
+  private async applyLanguageWorkspaceEdit(edit: LanguageWorkspaceEdit, label: string): Promise<void> {
+    if (!this.workspace || !window.codeyo) {
+      return;
+    }
+    const byPath = groupTextEditsByPath(edit.edits);
+    let changedFiles = 0;
+    let changedEdits = 0;
+    const skipped: string[] = [];
+    for (const [path, edits] of byPath) {
+      const file = this.ideFiles.find((candidate) => candidate.path === path);
+      if (!file || !file.workspaceFile) {
+        skipped.push(path);
+        continue;
+      }
+      let base: string;
+      if (file.status === 'edited' || file.status === 'new') {
+        base = file.lines.join('\n');
+      } else {
+        try {
+          const document = await window.codeyo.files.read(this.workspace.id, path);
+          base = document.content;
+          file.diskVersion = document.diskVersion;
+          file.lang = document.language;
+          file.missingOnDisk = false;
+        } catch (error) {
+          this.workspaceNotice = this.desktopError(error, `${label} READ FAILED · ${path}`);
+          this.renderDesktopState();
+          return;
+        }
+      }
+      const next = applyTextEdits(base, edits);
+      if (next === base) {
+        continue;
+      }
+      file.lines = next.split('\n');
+      if (file.status === 'saved') {
+        file.status = 'edited';
+      }
+      this.runnerStore.clearDiagnosticsForPath(file.path);
+      if (this.workspace.trusted) {
+        this.scheduleRecoveryBuffer(file.path, next);
+        this.syncLanguageDocument(file, 'change');
+      }
+      changedFiles += 1;
+      changedEdits += edits.length;
+    }
+    if (!changedFiles) {
+      this.workspaceNotice = `${label} · NO CHANGES`;
+      this.renderDesktopState();
+      return;
+    }
+    if (this.conflictCompareOpen) {
+      this.refreshConflictComparison();
+    }
+    const skippedNote = skipped.length ? ` · SKIPPED ${skipped.length} OUTSIDE WORKSPACE` : '';
+    this.workspaceNotice = `${label} · ${changedEdits} EDITS IN ${changedFiles} FILES · REVIEW AND SAVE ALL${skippedNote}`;
+    this.renderDesktopState();
   }
 
   openGoToLine(): void {
