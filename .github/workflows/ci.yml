@@ -1,0 +1,19 @@
+name: CI
+
+# Runs the full verification suite on every push to main and every PR.
+# No release or publish happens here — releases are gated separately in
+# release.yml behind a manual trigger and human approval.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    uses: ./.github/workflows/verify.yml
