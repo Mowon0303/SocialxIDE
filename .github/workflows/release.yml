@@ -1,0 +1,39 @@
+name: Release gate
+
+# Releases never happen automatically. This workflow only runs when a human
+# manually triggers it (Actions tab -> "Release gate" -> Run workflow), and even
+# then it pauses for explicit approval before signalling go.
+#
+# Flow:
+#   1. `verify` re-runs the full verification suite.
+#   2. `approve` runs in the protected `release` environment. To make this a real
+#      pause, configure required reviewers once in repo Settings -> Environments
+#      -> release (add yourself). Until approved, the run waits — this is the
+#      "let me think about it before releasing" gate.
+#   3. The actual signed/notarized macOS DMG build stays a local step
+#      (npm run desktop:dist:mac && npm run desktop:verify:mac), because it needs
+#      Apple credentials and a macOS host. This workflow only verifies and gates.
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Why are you cutting a release? (recorded in the run)"
+        required: false
+        default: ""
+
+jobs:
+  verify:
+    uses: ./.github/workflows/verify.yml
+
+  approve:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - name: Release approved
+        run: |
+          echo "Verification passed and the release was approved by a human reviewer."
+          echo "Reason: ${{ github.event.inputs.reason }}"
+          echo "Next (local, macOS): npm run desktop:dist:mac && npm run desktop:verify:mac"
+          echo "See README 'Desktop Packaging' and electron/VERIFY-IDE-ACTIONS.md."
