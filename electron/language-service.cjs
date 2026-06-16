@@ -138,11 +138,21 @@ class LanguageServiceManager {
     if (!client) {
       return { available: false, reason: 'missing-tool' };
     }
-    await this.ensureDocumentSynced(workspace, client, safe);
-    if (!newName) {
+    const safeName = sanitizeRenameName(newName);
+    if (!safeName) {
       return { available: false, reason: 'missing-new-name' };
     }
-    return { available: false, reason: 'workspace-edit-application-pending' };
+    await this.ensureDocumentSynced(workspace, client, safe);
+    const result = await withTimeout(client.connection.sendRequest(protocol.RenameRequest.type, {
+      textDocument: { uri: this.documentUri(workspace, safe.path) },
+      position: lspPosition(safe.line, safe.column),
+      newName: safeName,
+    }), lspRequestTimeoutMs, 'Rename timed out');
+    const edits = normalizeWorkspaceEdit(result, workspace.rootPath, this.pathApi);
+    if (!edits.length) {
+      return { available: false, reason: 'no-rename-edits' };
+    }
+    return { available: true, edit: { edits } };
   }
 
   async codeActions(workspace, request) {
@@ -152,7 +162,13 @@ class LanguageServiceManager {
       return { available: false, reason: 'missing-tool', actions: [] };
     }
     await this.ensureDocumentSynced(workspace, client, safe);
-    return { available: false, reason: 'workspace-edit-application-pending', actions: [] };
+    const position = lspPosition(safe.line, safe.column);
+    const result = await withTimeout(client.connection.sendRequest(protocol.CodeActionRequest.type, {
+      textDocument: { uri: this.documentUri(workspace, safe.path) },
+      range: { start: position, end: position },
+      context: { diagnostics: [], triggerKind: 1 },
+    }), lspRequestTimeoutMs, 'Code actions timed out');
+    return { available: true, actions: normalizeCodeActions(result, workspace.rootPath, this.pathApi) };
   }
 
   async formatDocument(workspace, document) {
@@ -773,6 +789,80 @@ function normalizeTextEdits(result, relativePath) {
   }).filter(Boolean);
 }
 
+// Flattens an LSP WorkspaceEdit (either `changes` map or `documentChanges`
+// array) into path-tagged 1-based edits, dropping any URI that does not resolve
+// to a relative path inside the trusted workspace. File create/rename/delete
+// resource operations are intentionally ignored.
+function normalizeWorkspaceEdit(workspaceEdit, rootPath, pathApi) {
+  if (!workspaceEdit || typeof workspaceEdit !== 'object') {
+    return [];
+  }
+  const edits = [];
+  const pushEdits = (uri, textEdits) => {
+    const relativePath = relativePathFromUri(uri, rootPath, pathApi);
+    if (!relativePath || !Array.isArray(textEdits)) {
+      return;
+    }
+    for (const textEdit of textEdits) {
+      if (!textEdit || !textEdit.range) {
+        continue;
+      }
+      const range = fromLspRange(textEdit.range);
+      edits.push({
+        path: relativePath,
+        startLine: range.startLine,
+        startColumn: range.startColumn,
+        endLine: range.endLine,
+        endColumn: range.endColumn,
+        newText: typeof textEdit.newText === 'string' ? textEdit.newText : '',
+      });
+    }
+  };
+  if (workspaceEdit.changes && typeof workspaceEdit.changes === 'object') {
+    for (const [uri, textEdits] of Object.entries(workspaceEdit.changes)) {
+      pushEdits(uri, textEdits);
+    }
+  }
+  if (Array.isArray(workspaceEdit.documentChanges)) {
+    for (const change of workspaceEdit.documentChanges) {
+      if (change && change.textDocument && Array.isArray(change.edits)) {
+        pushEdits(change.textDocument.uri, change.edits);
+      }
+    }
+  }
+  return edits;
+}
+
+// Keeps only code actions that carry an applicable workspace edit; command-only
+// actions are dropped because Codeyo never executes arbitrary server commands.
+function normalizeCodeActions(result, rootPath, pathApi) {
+  const list = Array.isArray(result) ? result : [];
+  const actions = [];
+  for (const item of list) {
+    if (!item || typeof item !== 'object' || !item.edit) {
+      continue;
+    }
+    const edits = normalizeWorkspaceEdit(item.edit, rootPath, pathApi);
+    if (!edits.length) {
+      continue;
+    }
+    actions.push({
+      title: String(item.title || 'Code action'),
+      kind: typeof item.kind === 'string' ? item.kind : undefined,
+      edit: { edits },
+    });
+  }
+  return actions.slice(0, 40);
+}
+
+function sanitizeRenameName(newName) {
+  const value = String(newName ?? '').trim();
+  if (!value || value.length > 200 || /[\r\n\0]/.test(value)) {
+    return '';
+  }
+  return value;
+}
+
 function markdownToPlainText(value) {
   if (!value) {
     return '';
@@ -850,11 +940,13 @@ module.exports = {
   LanguageServiceManager,
   executableOnPath,
   lspPosition,
+  normalizeCodeActions,
   normalizeCompletionResult,
   normalizeDefinitionResult,
   normalizeHoverResult,
   normalizeLspDiagnostics,
   normalizeTextEdits,
+  normalizeWorkspaceEdit,
   positionInRegion,
   relativePathFromUri,
   resolveLanguageServerCommand,

@@ -157,6 +157,8 @@ function createDesktopHarness(
       hover: vi.fn(async () => ({ available: true, contents: 'hover docs' })),
       definition: vi.fn(async () => ({ available: true, locations: [{ path: 'main.py', line: 1, column: 1 }] })),
       formatDocument: vi.fn(async () => ({ available: true, edit: { edits: [] } })),
+      renameSymbol: vi.fn(async () => ({ available: true, edit: { edits: [] } })),
+      codeActions: vi.fn(async () => ({ available: true, actions: [] })),
       onDiagnostics: vi.fn(() => () => undefined),
       onStatus: vi.fn(() => () => undefined),
     },
@@ -1358,6 +1360,108 @@ describe('App', () => {
       'workspace-1',
       expect.objectContaining({ path: 'main.cpp', content: 'int main(){return 0;}\n' }),
     );
+  });
+
+  it('should apply a multi-file rename to buffers and mark every touched file dirty', async () => {
+    const desktop = createDesktopHarness({
+      'main.py': 'value = 1\nprint(value)\n',
+      'util.py': 'value = 2\n',
+    });
+    window.codeyo = desktop.api;
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    await app.openDesktopWorkspace();
+    app.selectIdeFile('main.py');
+    app.editorCursorLine = 1;
+    app.editorCursorColumn = 1;
+
+    desktop.api.language.renameSymbol = vi.fn(async () => ({
+      available: true,
+      edit: {
+        edits: [
+          { path: 'main.py', startLine: 1, startColumn: 1, endLine: 1, endColumn: 6, newText: 'count' },
+          { path: 'main.py', startLine: 2, startColumn: 7, endLine: 2, endColumn: 12, newText: 'count' },
+          { path: 'util.py', startLine: 1, startColumn: 1, endLine: 1, endColumn: 6, newText: 'count' },
+        ],
+      },
+    }));
+
+    app.renameSymbolDraft = 'count';
+    await app.submitRenameSymbol();
+
+    expect(app.renameSymbolOpen).toBe(false);
+    expect(app.activeEditorText).toBe('count = 1\nprint(count)\n');
+    expect(app.activeIdeFile.status).toBe('edited');
+    expect(app.workspaceNotice).toContain('RENAMED TO count');
+    expect(app.workspaceNotice).toContain('2 FILES');
+    // Nothing written to disk — the rename is a reviewable dirty change.
+    expect(desktop.api.files.write).not.toHaveBeenCalled();
+
+    app.selectIdeFile('util.py');
+    expect(app.activeEditorText).toBe('count = 2\n');
+    expect(app.activeIdeFile.status).toBe('edited');
+  });
+
+  it('should report a clear notice when rename has no locations', async () => {
+    const desktop = createDesktopHarness({ 'main.py': 'x = 1\n' });
+    window.codeyo = desktop.api;
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    await app.openDesktopWorkspace();
+
+    desktop.api.language.renameSymbol = vi.fn(async () => ({ available: false, reason: 'no-rename-edits' }));
+    app.renameSymbolDraft = 'y';
+    await app.submitRenameSymbol();
+
+    expect(app.workspaceNotice).toContain('RENAME UNAVAILABLE');
+    expect(app.workspaceNotice).toContain('NO RENAME LOCATIONS');
+  });
+
+  it('should list code actions and apply the selected workspace edit', async () => {
+    const desktop = createDesktopHarness({ 'main.py': 'import os\n' });
+    window.codeyo = desktop.api;
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    await app.openDesktopWorkspace();
+    app.selectIdeFile('main.py');
+
+    desktop.api.language.codeActions = vi.fn(async () => ({
+      available: true,
+      actions: [
+        {
+          title: 'Remove unused import',
+          kind: 'quickfix',
+          edit: { edits: [{ path: 'main.py', startLine: 1, startColumn: 1, endLine: 2, endColumn: 1, newText: '' }] },
+        },
+      ],
+    }));
+
+    await app.requestCodeActions();
+    expect(app.codeActionMenuOpen).toBe(true);
+    expect(app.codeActionItems.length).toBe(1);
+
+    await app.applyCodeAction(app.codeActionItems[0]);
+    expect(app.codeActionMenuOpen).toBe(false);
+    expect(app.activeEditorText).toBe('');
+    expect(app.workspaceNotice).toContain('APPLIED · Remove unused import');
+  });
+
+  it('should report when there are no code actions at the cursor', async () => {
+    const desktop = createDesktopHarness({ 'main.py': 'x = 1\n' });
+    window.codeyo = desktop.api;
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    await app.openDesktopWorkspace();
+
+    desktop.api.language.codeActions = vi.fn(async () => ({ available: true, actions: [] }));
+    await app.requestCodeActions();
+
+    expect(app.codeActionMenuOpen).toBe(false);
+    expect(app.workspaceNotice).toContain('NO CODE ACTIONS');
   });
 
   it('should resume a recent trusted workspace without showing the native picker again', async () => {

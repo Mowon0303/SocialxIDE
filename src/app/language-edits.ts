@@ -49,3 +49,25 @@ export function applyTextEdits(text: string, edits: readonly LanguageTextEdit[])
   }
   return result;
 }
+
+/**
+ * Group a workspace edit's text edits by their target path, preserving order.
+ * Used to apply a multi-file rename / code action one file at a time.
+ */
+export function groupTextEditsByPath(
+  edits: readonly LanguageTextEdit[],
+): Map<string, LanguageTextEdit[]> {
+  const byPath = new Map<string, LanguageTextEdit[]>();
+  for (const edit of edits ?? []) {
+    if (!edit || !edit.path) {
+      continue;
+    }
+    const existing = byPath.get(edit.path);
+    if (existing) {
+      existing.push(edit);
+    } else {
+      byPath.set(edit.path, [edit]);
+    }
+  }
+  return byPath;
+}
