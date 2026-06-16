@@ -17,3 +17,36 @@ concurrency:
 jobs:
   verify:
     uses: ./.github/workflows/verify.yml
+
+  # Highest-fidelity check: launches the real Electron app via Playwright and
+  # drives editor/run/terminal/git/snapshot/problems flows end to end. Heavier
+  # and more timing-sensitive than `verify`, so it runs as its own job (with CI
+  # retries) rather than gating the fast checks.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install system dependencies (clang++ for C++ run, xvfb for the display)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang xvfb
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Electron/Chromium shared libraries
+        run: npx playwright install-deps
+
+      - name: Rebuild node-pty against Electron (real terminal)
+        run: npm run desktop:rebuild
+
+      - name: Desktop E2E (Playwright + Electron under xvfb)
+        run: xvfb-run -a npm run desktop:e2e
+        env:
+          ELECTRON_DISABLE_SANDBOX: 1
