@@ -6,8 +6,14 @@ import {
   OnInit,
   ViewEncapsulation,
 } from '@angular/core';
+import { NgStyle } from '@angular/common';
 import { CodeEditorComponent } from './code-editor.component';
 import { DesktopTerminalComponent } from './desktop-terminal.component';
+import { EmptyStateComponent } from './panels/empty-state.component';
+import { ExplorerPanelComponent } from './panels/explorer-panel.component';
+import { GitPanelComponent } from './panels/git-panel.component';
+import { ReviewPanelComponent } from './panels/review-panel.component';
+import { SettingsPanelComponent } from './panels/settings-panel.component';
 import {
   EditorDiagnostic,
   EditorLanguage,
@@ -22,6 +28,12 @@ import {
   GitStatus,
   GitWorkspaceCompareMode,
   JournalEntry,
+  LanguageCompletionResult,
+  LanguageDefinitionLocation,
+  LanguageFormatResult,
+  LanguageHoverResult,
+  LanguageServiceStatus,
+  LanguageWorkspaceStatus,
   RecoveryBuffer,
   RunProfile,
   RunResult,
@@ -32,109 +44,71 @@ import {
   WorkspaceFileChange,
   WorkspaceHandle,
 } from './desktop-api';
+import { EditorLanguagePosition } from './code-editor.component';
+import {
+  defaultEditorFontId,
+  defaultEditorThemeId,
+  editorFontPreset,
+  editorFontPresets,
+  editorThemePreset,
+  editorThemePresets,
+  EditorFontId,
+  EditorThemeId,
+} from './editor-appearance';
+import { extractSpellCheckRegions } from './spell-regions';
+import { applyTextEdits } from './language-edits';
+import {
+  ChannelItem,
+  ChannelView,
+  ConsolePanel,
+  EditorDensity,
+  ExplorerTreeEntry,
+  FileWriteResult,
+  FilesAction,
+  IdeFile,
+  JournalKindFilter,
+  JournalWriteResult,
+  LineComparison,
+  LineDiffHunk,
+  RailResizeTarget,
+  RightPanel,
+  ScreenId,
+  StoredChannelItem,
+  ThreadUpdate,
+} from './ide-types';
+import { ExplorerStore } from './stores/explorer.store';
+import { GitStore } from './stores/git.store';
+import { JournalStore } from './stores/journal.store';
+import { LanguageStore, ProblemSourceFilter } from './stores/language.store';
+import { ProjectSettingsStore } from './stores/project-settings.store';
+import { RunnerStore } from './stores/runner.store';
+import { SettingsStore } from './stores/settings.store';
+import { SnapshotStore } from './stores/snapshot.store';
+import { WorkspaceStore } from './stores/workspace.store';
 
-type ScreenId = 'channels' | 'command';
-type ChannelView = 'thread' | 'ide';
-type RightPanel = 'contributors' | 'files' | 'git' | 'settings';
-type ConsolePanel = 'terminal' | 'problems' | 'output';
-type EditorDensity = 'compact' | 'comfortable';
-type RailResizeTarget = 'workspace' | 'explorer';
-type FilesAction = 'open-folder' | 'resume-workspace' | 'trust-workspace' | 'new-file' | 'review' | 'duplicate' | 'rename' | 'delete' | 'assist';
-type JournalKindFilter = 'all' | JournalEntry['kind'];
-type JournalWriteStatus = 'saved' | 'refresh-failed' | 'write-failed' | 'skipped';
+export type ConfirmDialogVariant = 'default' | 'danger' | 'warning';
 
-interface JournalWriteResult {
-  status: JournalWriteStatus;
-  detail?: string;
-}
-
-interface IdeFile {
-  name: string;
-  path: string;
-  lang: EditorLanguage;
-  status: 'saved' | 'edited' | 'new';
-  lines: string[];
-  builtIn?: boolean;
-  diskVersion?: string;
-  workspaceFile?: boolean;
-  missingOnDisk?: boolean;
-}
-
-type FileWriteResult = {
-  conflict: boolean;
-  diskVersion: string;
-  diskContent?: string;
-  deleted?: boolean;
-};
-
-interface ExplorerTreeNode {
-  name: string;
-  path: string;
-  kind: 'folder' | 'file';
-  children: Map<string, ExplorerTreeNode>;
-  file?: IdeFile;
-}
-
-interface ExplorerTreeEntry {
-  id: string;
-  name: string;
-  path: string;
-  kind: 'folder' | 'file';
-  depth: number;
-  expanded?: boolean;
-  file?: IdeFile;
-}
-
-interface ThreadUpdate {
-  file: string;
-  result: string;
-  time: string;
-  kind: 'run' | 'review';
-}
-
-interface ChannelItem {
-  id: string;
-  index: string;
-  name: string;
-  topic: string;
-  unread?: number;
-  mention?: boolean;
-  marker?: boolean;
-}
-
-interface StoredChannelItem {
-  id: string;
-  name: string;
-  topic?: unknown;
-  unread?: unknown;
-  mention?: unknown;
-  marker?: unknown;
-}
-
-interface StoredRailWidths {
-  workspace?: unknown;
-  explorer?: unknown;
-}
-
-interface LineComparison {
-  added: number;
-  removed: number;
-  leftLines: number[];
-  rightLines: number[];
-  hunks: LineDiffHunk[];
-}
-
-interface LineDiffHunk {
-  id: number;
-  snapshotStart: number;
-  currentStart: number;
-  snapshotLines: string[];
-  currentLines: string[];
+export interface ConfirmDialogRequest {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  variant: ConfirmDialogVariant;
+  details?: string;
 }
 
 @Component({
   selector: 'app-root',
-  imports: [CodeEditorComponent, DesktopTerminalComponent],
+  imports: [
+    NgStyle,
+    CodeEditorComponent,
+    DesktopTerminalComponent,
+    EmptyStateComponent,
+    ExplorerPanelComponent,
+    GitPanelComponent,
+    ReviewPanelComponent,
+    SettingsPanelComponent,
+  ],
   templateUrl: './app.html',
   styleUrls: ['./app.css', './git-panel.css'],
   encapsulation: ViewEncapsulation.None,
@@ -153,12 +127,15 @@ export class App implements OnInit, OnDestroy {
   channelDeleteArmed = false;
   filesActionsMenuOpen = false;
   workspaceTrustPromptOpen = false;
+  confirmDialog: ConfirmDialogRequest | null = null;
   terminalPaneOpen = !this.isDesktop;
   terminalRequestedAfterTrust = false;
   activeRightPanel: RightPanel = 'files';
   activeConsolePanel: ConsolePanel = 'terminal';
   editorDensity: EditorDensity = 'compact';
   editorFontSizePx = 13;
+  editorFontId: EditorFontId = defaultEditorFontId;
+  editorThemeId: EditorThemeId = defaultEditorThemeId;
   workspaceRailWidth = 212;
   explorerRailWidth = 206;
   resizingRail: RailResizeTarget | null = null;
@@ -168,118 +145,49 @@ export class App implements OnInit, OnDestroy {
   lastSavedAt = '14:24';
   workspaceExpanded = true;
   srcExpanded = true;
-  fileQuery = '';
-  explorerTreeEntries: ExplorerTreeEntry[] = [];
-  quickOpenVisible = false;
-  quickOpenQuery = '';
-  quickOpenIndex = 0;
-  readonly expandedExplorerDirs = new Set<string>();
   private explorerTreeRebuildQueued = false;
   creatingFile = false;
   newFileName = '';
+  renamingFilePath = '';
+  renameDraft = '';
   terminalCommand = '';
   private removeOpenTerminalMenuListener?: () => void;
   runShared = false;
   lastRunTarget = 'fib.py';
   lastRunSummary = 'memo hits: 38 · cache size: 41';
   threadUpdates: ThreadUpdate[] = [];
-  workspace: WorkspaceHandle | null = null;
-  recentWorkspace: WorkspaceHandle | null = null;
-  workspaceNotice = 'OPEN A LOCAL FOLDER TO BEGIN YOUR DESKTOP WORKSPACE.';
   desktopOutput: string[] = [];
   runTaskTranscript: string[] = [];
   runTaskSequence = 0;
-  runDiagnostics: EditorDiagnostic[] = [];
-  recentRunResults: RunResult[] = [];
-  recoveryBuffers: RecoveryBuffer[] = [];
+  problemFilter: 'all' | 'active' = 'all';
+  problemSourceFilter: ProblemSourceFilter = 'all';
   diagnosticRevealLine = 0;
   diagnosticRevealColumn = 1;
   diagnosticRevealRequest = 0;
-  journalEntries: JournalEntry[] = [];
-  journalDraft = '';
-  journalQuery = '';
-  journalKindFilter: JournalKindFilter = 'all';
-  gitStatus: GitStatus | null = null;
-  gitBranches: string[] = [];
-  gitStagedSummary: GitStagedSummary = { files: [], additions: 0, deletions: 0 };
-  selectedBranch = '';
-  gitNotice = 'OPEN AND TRUST A WORKSPACE TO INSPECT GIT.';
-  gitComparison: GitComparison | null = null;
-  gitComparisonLeftLines: number[] = [];
-  gitComparisonRightLines: number[] = [];
-  gitComparisonAdded = 0;
-  gitComparisonRemoved = 0;
-  gitHunks: LineDiffHunk[] = [];
-  pendingDiscardHunkId: number | null = null;
-  gitHistoryDetail: GitCommitDetail | null = null;
-  gitHistory: GitCommitSummary[] = [];
-  gitHistoryQuery = '';
-  reviewSnapshotDraft = '';
-  selectedReviewRunResultId = '';
-  selectedCommitRunResultId = '';
-  commitMessage = '';
-  branchName = '';
-  pythonExecutable = 'python3';
-  cppExecutable = 'clang++';
-  profileArgs = '';
-  cppProgramArgs = '';
+  editorCursorLine = 1;
+  editorCursorColumn = 1;
+  editorSearchRequest = 0;
+  editorDefinitionRequest = 0;
+  goToLineOpen = false;
+  goToLineDraft = '';
+  shortcutPanelOpen = false;
   cppSelectedSources: string[] = [];
   environmentChecks: ToolCheckResult[] = [];
-  fileConflict: { diskContent: string; diskVersion: string; deleted?: boolean } | null = null;
-  conflictCompareOpen = false;
-  conflictComparison: LineComparison = {
-    added: 0,
-    removed: 0,
-    leftLines: [],
-    rightLines: [],
-    hunks: [],
-  };
-  snapshotPreview: ReviewSnapshot | null = null;
-  snapshotActivePath = '';
-  snapshotRunResult: RunResult | null = null;
-  snapshotEvidenceOpen = false;
-  snapshotDiagnosticRevealLine = 0;
-  snapshotDiagnosticRevealColumn = 1;
-  snapshotDiagnosticRevealRequest = 0;
-  snapshotCompareOpen = false;
-  snapshotCurrentContent = '';
-  snapshotCurrentMissing = false;
-  snapshotComparison: LineComparison = {
-    added: 0,
-    removed: 0,
-    leftLines: [],
-    rightLines: [],
-    hunks: [],
-  };
   storageBusy = false;
-  runBusy = false;
-  gitBusy = false;
-  gitCompareBusy = false;
-  gitSnapshotBusy = false;
   environmentBusy = false;
-  commitReviewOpen = false;
-  autoSaveEnabled = false;
   readonly autoSaveDelayMs = 1400;
   private readonly channelStorageKey = 'codeyo.channels.v1';
-  private readonly editorDensityStorageKey = 'codeyo.editor-density.v1';
-  private readonly editorFontSizeStorageKey = 'codeyo.editor-font-size.v1';
   readonly editorFontSizeMin = 12;
   readonly editorFontSizeMax = 18;
-  private readonly editorFontSizeDefault = 13;
-  private readonly railWidthStorageKey = 'codeyo.rail-widths.v1';
-  private readonly railMinWidths: Record<RailResizeTarget, number> = {
-    workspace: 156,
-    explorer: 168,
-  };
-  private readonly railMaxWidths: Record<RailResizeTarget, number> = {
-    workspace: 380,
-    explorer: 360,
-  };
-  private readonly railCenterMinWidth = 420;
+  readonly editorFontPresets = editorFontPresets;
+  readonly editorThemePresets = editorThemePresets;
   private railResizeBounds: { left: number; right: number; width: number } | null = null;
   private readonly recoveryTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly autoSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private confirmDialogResolver: ((confirmed: boolean) => void) | null = null;
   private removeFileChangeListener?: () => void;
+  private removeLanguageDiagnosticsListener?: () => void;
+  private removeLanguageStatusListener?: () => void;
   runOutput = [
     '$ python fib.py',
     'fib(40) = 102334155',
@@ -365,11 +273,54 @@ export class App implements OnInit, OnDestroy {
     ],
   };
 
-  constructor(private readonly changeDetector: ChangeDetectorRef) {
-    this.loadStoredEditorDensity();
-    this.loadStoredEditorFontSize();
-    this.loadStoredRailWidths();
+  constructor(
+    private readonly changeDetector: ChangeDetectorRef,
+    private readonly explorerStore: ExplorerStore,
+    private readonly gitStore: GitStore,
+    private readonly journalStore: JournalStore,
+    private readonly languageStore: LanguageStore,
+    private readonly projectSettingsStore: ProjectSettingsStore,
+    private readonly runnerStore: RunnerStore,
+    private readonly settingsStore: SettingsStore,
+    private readonly snapshotStore: SnapshotStore,
+    private readonly workspaceStore: WorkspaceStore,
+  ) {
+    this.workspaceStore.reset();
+    this.journalStore.resetWorkspaceState();
+    this.snapshotStore.close();
+    this.runnerStore.resetWorkspaceState();
+    this.languageStore.resetWorkspaceState();
+    this.gitStore.resetWorkspaceState();
+    this.explorerStore.clearExpanded();
+    this.explorerStore.rebuild(this.visibleIdeFiles);
+    this.settingsStore.load();
+    this.editorDensity = this.settingsStore.editorDensity;
+    this.editorFontSizePx = this.settingsStore.editorFontSizePx;
+    this.editorFontId = this.settingsStore.editorFontId;
+    this.editorThemeId = this.settingsStore.editorThemeId;
+    this.workspaceRailWidth = this.settingsStore.workspaceRailWidth;
+    this.explorerRailWidth = this.settingsStore.explorerRailWidth;
   }
+
+  readonly languageCompletionProvider = async (position: EditorLanguagePosition): Promise<LanguageCompletionResult> => {
+    if (!this.workspace?.trusted || !window.codeyo?.language || !this.autocompleteEnabled || !this.isTrustedWorkspaceFile(this.activeIdeFile)) {
+      return { available: false, items: [] };
+    }
+    return window.codeyo.language.completion(
+      this.workspace.id,
+      this.languageRequestFor(this.activeIdeFile, position),
+    );
+  };
+
+  readonly languageHoverProvider = async (position: EditorLanguagePosition): Promise<LanguageHoverResult> => {
+    if (!this.workspace?.trusted || !window.codeyo?.language || !this.lspDiagnosticsEnabled || !this.isTrustedWorkspaceFile(this.activeIdeFile)) {
+      return { available: false, contents: '' };
+    }
+    return window.codeyo.language.hover(
+      this.workspace.id,
+      this.languageRequestFor(this.activeIdeFile, position),
+    );
+  };
 
   ngOnInit(): void {
     this.loadStoredChannels();
@@ -381,18 +332,573 @@ export class App implements OnInit, OnDestroy {
       this.removeOpenTerminalMenuListener = window.codeyo?.appMenu?.onOpenTerminal(() => {
         this.openTerminalFromMenu();
       });
+      this.removeLanguageDiagnosticsListener = window.codeyo?.language?.onDiagnostics((event) => {
+        this.applyLanguageDiagnostics(event);
+      });
+      this.removeLanguageStatusListener = window.codeyo?.language?.onStatus((event) => {
+        this.applyLanguageStatus(event);
+      });
       void this.loadRecentWorkspaceHint();
     }
   }
 
   ngOnDestroy(): void {
+    if (this.confirmDialogResolver) {
+      this.closeConfirmDialog(false);
+    }
     this.clearWorkspaceTimers();
     this.removeFileChangeListener?.();
     this.removeOpenTerminalMenuListener?.();
+    this.removeLanguageDiagnosticsListener?.();
+    this.removeLanguageStatusListener?.();
+  }
+
+  get workspace(): WorkspaceHandle | null {
+    return this.workspaceStore.workspace;
+  }
+
+  set workspace(value: WorkspaceHandle | null) {
+    this.workspaceStore.workspace = value;
+  }
+
+  get recentWorkspace(): WorkspaceHandle | null {
+    return this.workspaceStore.recentWorkspace;
+  }
+
+  set recentWorkspace(value: WorkspaceHandle | null) {
+    this.workspaceStore.recentWorkspace = value;
+  }
+
+  get workspaceNotice(): string {
+    return this.workspaceStore.notice;
+  }
+
+  set workspaceNotice(value: string) {
+    this.workspaceStore.notice = value;
+  }
+
+  get recoveryBuffers(): RecoveryBuffer[] {
+    return this.workspaceStore.recoveryBuffers;
+  }
+
+  set recoveryBuffers(value: RecoveryBuffer[]) {
+    this.workspaceStore.recoveryBuffers = value;
+  }
+
+  get fileConflict(): { diskContent: string; diskVersion: string; deleted?: boolean } | null {
+    return this.workspaceStore.fileConflict;
+  }
+
+  set fileConflict(value: { diskContent: string; diskVersion: string; deleted?: boolean } | null) {
+    this.workspaceStore.fileConflict = value;
+  }
+
+  get conflictCompareOpen(): boolean {
+    return this.workspaceStore.conflictCompareOpen;
+  }
+
+  set conflictCompareOpen(value: boolean) {
+    this.workspaceStore.conflictCompareOpen = value;
+  }
+
+  get conflictComparison(): LineComparison {
+    return this.workspaceStore.conflictComparison;
+  }
+
+  set conflictComparison(value: LineComparison) {
+    this.workspaceStore.conflictComparison = value;
+  }
+
+  get journalEntries(): JournalEntry[] {
+    return this.journalStore.entries;
+  }
+
+  set journalEntries(value: JournalEntry[]) {
+    this.journalStore.entries = value;
+  }
+
+  get journalDraft(): string {
+    return this.journalStore.draft;
+  }
+
+  set journalDraft(value: string) {
+    this.journalStore.draft = value;
+  }
+
+  get journalQuery(): string {
+    return this.journalStore.query;
+  }
+
+  set journalQuery(value: string) {
+    this.journalStore.query = value;
+  }
+
+  get journalKindFilter(): JournalKindFilter {
+    return this.journalStore.kindFilter;
+  }
+
+  set journalKindFilter(value: JournalKindFilter) {
+    this.journalStore.kindFilter = value;
+  }
+
+  get snapshotPreview(): ReviewSnapshot | null {
+    return this.snapshotStore.preview;
+  }
+
+  set snapshotPreview(value: ReviewSnapshot | null) {
+    this.snapshotStore.preview = value;
+  }
+
+  get snapshotActivePath(): string {
+    return this.snapshotStore.activePath;
+  }
+
+  set snapshotActivePath(value: string) {
+    this.snapshotStore.activePath = value;
+  }
+
+  get snapshotRunResult(): RunResult | null {
+    return this.snapshotStore.runResult;
+  }
+
+  set snapshotRunResult(value: RunResult | null) {
+    this.snapshotStore.runResult = value;
+  }
+
+  get snapshotEvidenceOpen(): boolean {
+    return this.snapshotStore.evidenceOpen;
+  }
+
+  set snapshotEvidenceOpen(value: boolean) {
+    this.snapshotStore.evidenceOpen = value;
+  }
+
+  get snapshotDiagnosticRevealLine(): number {
+    return this.snapshotStore.diagnosticRevealLine;
+  }
+
+  set snapshotDiagnosticRevealLine(value: number) {
+    this.snapshotStore.diagnosticRevealLine = value;
+  }
+
+  get snapshotDiagnosticRevealColumn(): number {
+    return this.snapshotStore.diagnosticRevealColumn;
+  }
+
+  set snapshotDiagnosticRevealColumn(value: number) {
+    this.snapshotStore.diagnosticRevealColumn = value;
+  }
+
+  get snapshotDiagnosticRevealRequest(): number {
+    return this.snapshotStore.diagnosticRevealRequest;
+  }
+
+  set snapshotDiagnosticRevealRequest(value: number) {
+    this.snapshotStore.diagnosticRevealRequest = value;
+  }
+
+  get snapshotCompareOpen(): boolean {
+    return this.snapshotStore.compareOpen;
+  }
+
+  set snapshotCompareOpen(value: boolean) {
+    this.snapshotStore.compareOpen = value;
+  }
+
+  get snapshotCurrentContent(): string {
+    return this.snapshotStore.currentContent;
+  }
+
+  set snapshotCurrentContent(value: string) {
+    this.snapshotStore.currentContent = value;
+  }
+
+  get snapshotCurrentMissing(): boolean {
+    return this.snapshotStore.currentMissing;
+  }
+
+  set snapshotCurrentMissing(value: boolean) {
+    this.snapshotStore.currentMissing = value;
+  }
+
+  get snapshotComparison(): LineComparison {
+    return this.snapshotStore.comparison;
+  }
+
+  set snapshotComparison(value: LineComparison) {
+    this.snapshotStore.comparison = value;
+  }
+
+  get autoSaveEnabled(): boolean {
+    return this.projectSettingsStore.current.autoSaveEnabled;
+  }
+
+  set autoSaveEnabled(value: boolean) {
+    this.projectSettingsStore.current.autoSaveEnabled = value;
+  }
+
+  get formatOnSaveEnabled(): boolean {
+    return this.projectSettingsStore.current.formatOnSaveEnabled;
+  }
+
+  set formatOnSaveEnabled(value: boolean) {
+    this.projectSettingsStore.current.formatOnSaveEnabled = value;
+  }
+
+  get pythonExecutable(): string {
+    return this.projectSettingsStore.current.pythonCommand;
+  }
+
+  set pythonExecutable(value: string) {
+    this.projectSettingsStore.current.pythonCommand = value;
+  }
+
+  get cppExecutable(): string {
+    return this.projectSettingsStore.current.cppCommand;
+  }
+
+  set cppExecutable(value: string) {
+    this.projectSettingsStore.current.cppCommand = value;
+  }
+
+  get pythonFormatterCommand(): string {
+    return this.projectSettingsStore.current.pythonFormatterCommand;
+  }
+
+  set pythonFormatterCommand(value: string) {
+    this.projectSettingsStore.current.pythonFormatterCommand = value;
+  }
+
+  get profileArgs(): string {
+    return this.projectSettingsStore.current.profileArgs;
+  }
+
+  set profileArgs(value: string) {
+    this.projectSettingsStore.current.profileArgs = value;
+  }
+
+  get cppProgramArgs(): string {
+    return this.projectSettingsStore.current.cppProgramArgs;
+  }
+
+  set cppProgramArgs(value: string) {
+    this.projectSettingsStore.current.cppProgramArgs = value;
   }
 
   get homeMode(): boolean {
     return this.isDesktop && !this.workspace;
+  }
+
+  get fileQuery(): string {
+    return this.explorerStore.fileQuery;
+  }
+
+  set fileQuery(value: string) {
+    this.explorerStore.fileQuery = value;
+  }
+
+  get explorerTreeEntries(): ExplorerTreeEntry[] {
+    return this.explorerStore.entries;
+  }
+
+  get quickOpenVisible(): boolean {
+    return this.explorerStore.quickOpenVisible;
+  }
+
+  get quickOpenQuery(): string {
+    return this.explorerStore.quickOpenQuery;
+  }
+
+  set quickOpenQuery(value: string) {
+    this.explorerStore.quickOpenQuery = value;
+  }
+
+  get quickOpenIndex(): number {
+    return this.explorerStore.quickOpenIndex;
+  }
+
+  set quickOpenIndex(value: number) {
+    this.explorerStore.quickOpenIndex = value;
+  }
+
+  get gitStatus(): GitStatus | null {
+    return this.gitStore.status;
+  }
+
+  set gitStatus(value: GitStatus | null) {
+    this.gitStore.status = value;
+  }
+
+  get gitBranches(): string[] {
+    return this.gitStore.branches;
+  }
+
+  set gitBranches(value: string[]) {
+    this.gitStore.branches = value;
+  }
+
+  get gitStagedSummary(): GitStagedSummary {
+    return this.gitStore.stagedSummary;
+  }
+
+  set gitStagedSummary(value: GitStagedSummary) {
+    this.gitStore.stagedSummary = value;
+  }
+
+  get selectedBranch(): string {
+    return this.gitStore.selectedBranch;
+  }
+
+  set selectedBranch(value: string) {
+    this.gitStore.selectedBranch = value;
+  }
+
+  get gitNotice(): string {
+    return this.gitStore.notice;
+  }
+
+  set gitNotice(value: string) {
+    this.gitStore.notice = value;
+  }
+
+  get gitComparison(): GitComparison | null {
+    return this.gitStore.comparison;
+  }
+
+  set gitComparison(value: GitComparison | null) {
+    this.gitStore.comparison = value;
+  }
+
+  get gitComparisonLeftLines(): number[] {
+    return this.gitStore.comparisonLeftLines;
+  }
+
+  set gitComparisonLeftLines(value: number[]) {
+    this.gitStore.comparisonLeftLines = value;
+  }
+
+  get gitComparisonRightLines(): number[] {
+    return this.gitStore.comparisonRightLines;
+  }
+
+  set gitComparisonRightLines(value: number[]) {
+    this.gitStore.comparisonRightLines = value;
+  }
+
+  get gitComparisonAdded(): number {
+    return this.gitStore.comparisonAdded;
+  }
+
+  set gitComparisonAdded(value: number) {
+    this.gitStore.comparisonAdded = value;
+  }
+
+  get gitComparisonRemoved(): number {
+    return this.gitStore.comparisonRemoved;
+  }
+
+  set gitComparisonRemoved(value: number) {
+    this.gitStore.comparisonRemoved = value;
+  }
+
+  get gitHunks(): LineDiffHunk[] {
+    return this.gitStore.hunks;
+  }
+
+  set gitHunks(value: LineDiffHunk[]) {
+    this.gitStore.hunks = value;
+  }
+
+  get pendingDiscardHunkId(): number | null {
+    return this.gitStore.pendingDiscardHunkId;
+  }
+
+  set pendingDiscardHunkId(value: number | null) {
+    this.gitStore.pendingDiscardHunkId = value;
+  }
+
+  get gitHistoryDetail(): GitCommitDetail | null {
+    return this.gitStore.historyDetail;
+  }
+
+  set gitHistoryDetail(value: GitCommitDetail | null) {
+    this.gitStore.historyDetail = value;
+  }
+
+  get gitHistory(): GitCommitSummary[] {
+    return this.gitStore.history;
+  }
+
+  set gitHistory(value: GitCommitSummary[]) {
+    this.gitStore.history = value;
+  }
+
+  get gitHistoryQuery(): string {
+    return this.gitStore.historyQuery;
+  }
+
+  set gitHistoryQuery(value: string) {
+    this.gitStore.historyQuery = value;
+  }
+
+  get reviewSnapshotDraft(): string {
+    return this.gitStore.reviewSnapshotDraft;
+  }
+
+  set reviewSnapshotDraft(value: string) {
+    this.gitStore.reviewSnapshotDraft = value;
+  }
+
+  get selectedReviewRunResultId(): string {
+    return this.gitStore.selectedReviewRunResultId;
+  }
+
+  set selectedReviewRunResultId(value: string) {
+    this.gitStore.selectedReviewRunResultId = value;
+  }
+
+  get selectedCommitRunResultId(): string {
+    return this.gitStore.selectedCommitRunResultId;
+  }
+
+  set selectedCommitRunResultId(value: string) {
+    this.gitStore.selectedCommitRunResultId = value;
+  }
+
+  get commitMessage(): string {
+    return this.gitStore.commitMessage;
+  }
+
+  set commitMessage(value: string) {
+    this.gitStore.commitMessage = value;
+  }
+
+  get branchName(): string {
+    return this.gitStore.branchName;
+  }
+
+  set branchName(value: string) {
+    this.gitStore.branchName = value;
+  }
+
+  get gitBusy(): boolean {
+    return this.gitStore.busy;
+  }
+
+  set gitBusy(value: boolean) {
+    this.gitStore.busy = value;
+  }
+
+  get gitCompareBusy(): boolean {
+    return this.gitStore.compareBusy;
+  }
+
+  set gitCompareBusy(value: boolean) {
+    this.gitStore.compareBusy = value;
+  }
+
+  get gitSnapshotBusy(): boolean {
+    return this.gitStore.snapshotBusy;
+  }
+
+  set gitSnapshotBusy(value: boolean) {
+    this.gitStore.snapshotBusy = value;
+  }
+
+  get commitReviewOpen(): boolean {
+    return this.gitStore.commitReviewOpen;
+  }
+
+  set commitReviewOpen(value: boolean) {
+    this.gitStore.commitReviewOpen = value;
+  }
+
+  get runDiagnostics(): EditorDiagnostic[] {
+    return this.runnerStore.diagnostics;
+  }
+
+  set runDiagnostics(value: EditorDiagnostic[]) {
+    this.runnerStore.diagnostics = value;
+  }
+
+  get recentRunResults(): RunResult[] {
+    return this.runnerStore.recentResults;
+  }
+
+  set recentRunResults(value: RunResult[]) {
+    this.runnerStore.recentResults = value;
+  }
+
+  get pendingRunProfile(): RunProfile | null {
+    return this.runnerStore.pendingProfile;
+  }
+
+  set pendingRunProfile(value: RunProfile | null) {
+    this.runnerStore.pendingProfile = value;
+  }
+
+  get pendingRunDirtyPath(): string {
+    return this.runnerStore.pendingDirtyPath;
+  }
+
+  set pendingRunDirtyPath(value: string) {
+    this.runnerStore.pendingDirtyPath = value;
+  }
+
+  get runBusy(): boolean {
+    return this.runnerStore.busy;
+  }
+
+  set runBusy(value: boolean) {
+    this.runnerStore.busy = value;
+  }
+
+  get lspDiagnostics(): EditorDiagnostic[] {
+    return this.languageStore.lspDiagnostics;
+  }
+
+  set lspDiagnostics(value: EditorDiagnostic[]) {
+    this.languageStore.lspDiagnostics = value;
+  }
+
+  get spellDiagnostics(): EditorDiagnostic[] {
+    return this.languageStore.spellDiagnostics;
+  }
+
+  set spellDiagnostics(value: EditorDiagnostic[]) {
+    this.languageStore.spellDiagnostics = value;
+  }
+
+  get lspDiagnosticsEnabled(): boolean {
+    return this.languageStore.lspDiagnosticsEnabled;
+  }
+
+  set lspDiagnosticsEnabled(value: boolean) {
+    this.languageStore.lspDiagnosticsEnabled = value;
+  }
+
+  get autocompleteEnabled(): boolean {
+    return this.languageStore.autocompleteEnabled;
+  }
+
+  set autocompleteEnabled(value: boolean) {
+    this.languageStore.autocompleteEnabled = value;
+  }
+
+  get spellCheckEnabled(): boolean {
+    return this.languageStore.spellCheckEnabled;
+  }
+
+  set spellCheckEnabled(value: boolean) {
+    this.languageStore.spellCheckEnabled = value;
+  }
+
+  get languageWorkspaceStatus(): LanguageWorkspaceStatus | null {
+    return this.languageStore.workspaceStatus;
+  }
+
+  set languageWorkspaceStatus(value: LanguageWorkspaceStatus | null) {
+    this.languageStore.workspaceStatus = value;
   }
 
   get visibleIdeFiles(): IdeFile[] {
@@ -410,28 +916,24 @@ export class App implements OnInit, OnDestroy {
     return this.activeIdeFile.lines.join('\n');
   }
 
+  get allDiagnostics(): EditorDiagnostic[] {
+    return this.languageStore.allDiagnostics(this.runDiagnostics);
+  }
+
   get activeDiagnostics(): EditorDiagnostic[] {
-    return this.runDiagnostics.filter((diagnostic) => diagnostic.path === this.activeIdeFile.path);
+    return this.allDiagnostics.filter((diagnostic) => diagnostic.path === this.activeIdeFile.path);
   }
 
   get activeSnapshotFile(): { path: string; content: string } {
-    return this.snapshotPreview?.files.find((file) => file.path === this.snapshotActivePath)
-      ?? this.snapshotPreview?.files[0]
-      ?? { path: '', content: '' };
+    return this.snapshotStore.activeFile;
   }
 
   get snapshotLanguage(): EditorLanguage {
-    const path = this.activeSnapshotFile.path;
-    if (path.endsWith('.py')) {
-      return 'python';
-    }
-    return /\.(cpp|cc|cxx|hpp|h)$/.test(path) ? 'cpp' : 'text';
+    return this.snapshotStore.language;
   }
 
   get snapshotDiffSummary(): string {
-    return this.snapshotCurrentMissing
-      ? 'CURRENT FILE MISSING ON DISK'
-      : `${this.snapshotComparison.hunks.length} HUNKS · +${this.snapshotComparison.added} / -${this.snapshotComparison.removed} · SNAPSHOT TO CURRENT`;
+    return this.snapshotStore.diffSummary;
   }
 
   get snapshotRunTranscript(): string {
@@ -572,11 +1074,11 @@ export class App implements OnInit, OnDestroy {
   }
 
   get stagedGitFiles(): GitFileState[] {
-    return this.gitStatus?.files.filter((file) => file.index !== ' ' && file.index !== '?') ?? [];
+    return this.gitStore.stagedFiles;
   }
 
   get unstagedGitFiles(): GitFileState[] {
-    return this.gitStatus?.files.filter((file) => file.workingTree !== ' ') ?? [];
+    return this.gitStore.unstagedFiles;
   }
 
   get canReviewCommit(): boolean {
@@ -588,33 +1090,15 @@ export class App implements OnInit, OnDestroy {
   }
 
   get filteredGitHistory(): GitCommitSummary[] {
-    const query = this.gitHistoryQuery.trim().toLowerCase();
-    if (!query) {
-      return this.gitHistory;
-    }
-    return this.gitHistory.filter((commit) =>
-      [commit.shortRevision, commit.revision, commit.subject, commit.author]
-        .some((value) => value.toLowerCase().includes(query)));
+    return this.gitStore.filteredHistory;
   }
 
   get filteredJournalEntries(): JournalEntry[] {
-    const query = this.journalQuery.trim().toLowerCase();
-    return this.journalEntries.filter((entry) => {
-      const kindMatches = this.journalKindFilter === 'all' || entry.kind === this.journalKindFilter;
-      const queryMatches = !query || [
-        entry.kind,
-        entry.body,
-        entry.snapshotId ?? '',
-        JSON.stringify(entry.metadata ?? {}),
-      ].some((value) => value.toLowerCase().includes(query));
-      return kindMatches && queryMatches;
-    });
+    return this.journalStore.filteredEntries;
   }
 
   journalEntryCount(kind: JournalKindFilter): number {
-    return kind === 'all'
-      ? this.journalEntries.length
-      : this.journalEntries.filter((entry) => entry.kind === kind).length;
+    return this.journalStore.count(kind);
   }
 
   get cppSourceCandidates(): IdeFile[] {
@@ -637,84 +1121,8 @@ export class App implements OnInit, OnDestroy {
     return (this.workspace?.name || 'atelier-ide').toUpperCase();
   }
 
-  explorerFileIcon(file: IdeFile): string {
-    if (/\.tsx?$/i.test(file.name)) {
-      return 'TS';
-    }
-    if (/\.cjs$|\.mjs$|\.jsx?$/.test(file.name)) {
-      return 'JS';
-    }
-    if (/\.css$/i.test(file.name)) {
-      return '#';
-    }
-    if (/\.html$/i.test(file.name)) {
-      return '<>';
-    }
-    if (/\.md$/i.test(file.name)) {
-      return 'MD';
-    }
-    if (/\.py$/i.test(file.name)) {
-      return 'PY';
-    }
-    if (file.lang === 'cpp') {
-      return 'C++';
-    }
-    return 'TXT';
-  }
-
-  explorerFileStatus(file: IdeFile): string {
-    if (file.missingOnDisk) {
-      return '!';
-    }
-    if (file.status === 'saved') {
-      return '';
-    }
-    return file.status === 'new' ? 'U' : 'M';
-  }
-
-  explorerFileIconClass(file: IdeFile): string {
-    if (/\.html$/i.test(file.name)) {
-      return 'html';
-    }
-    if (/\.css$/i.test(file.name)) {
-      return 'css';
-    }
-    if (/\.md$/i.test(file.name)) {
-      return 'markdown';
-    }
-    if (/\.py$/i.test(file.name)) {
-      return 'python';
-    }
-    if (file.lang === 'cpp') {
-      return 'cpp';
-    }
-    return 'script';
-  }
-
   private rebuildExplorerTree(): void {
-    const query = this.fileQuery.trim().toLowerCase();
-    if (query) {
-      this.explorerTreeEntries = this.filteredIdeFiles.map((file) => ({
-        id: `file:${file.path}`,
-        name: file.path,
-        path: file.path,
-        kind: 'file',
-        depth: 1,
-        file,
-      }));
-      return;
-    }
-
-    const root: ExplorerTreeNode = {
-      name: '',
-      path: '',
-      kind: 'folder',
-      children: new Map<string, ExplorerTreeNode>(),
-    };
-    for (const file of this.visibleIdeFiles) {
-      this.addExplorerFile(root, file);
-    }
-    this.explorerTreeEntries = this.flattenExplorerChildren(root.children, 1);
+    this.explorerStore.rebuild(this.visibleIdeFiles);
   }
 
   private scheduleExplorerTreeRebuild(): void {
@@ -730,16 +1138,7 @@ export class App implements OnInit, OnDestroy {
   }
 
   get quickOpenResults(): IdeFile[] {
-    const query = this.quickOpenQuery.trim().toLowerCase();
-    const ranked = this.visibleIdeFiles
-      .map((file) => ({
-        file,
-        score: query ? this.quickOpenScore(file, query) : this.quickOpenDefaultScore(file),
-      }))
-      .filter((result) => Number.isFinite(result.score))
-      .sort((a, b) => a.score - b.score || a.file.path.localeCompare(b.file.path));
-
-    return ranked.slice(0, 12).map((result) => result.file);
+    return this.explorerStore.quickOpenResults(this.visibleIdeFiles, this.activeIdePath);
   }
 
   get editedFileCount(): number {
@@ -854,10 +1253,141 @@ export class App implements OnInit, OnDestroy {
     return !this.activeIdeFile.builtIn;
   }
 
+  get activeFileStatusLabel(): string {
+    if (this.homeMode) {
+      return 'readonly';
+    }
+    if (this.activeIdeFile.missingOnDisk) {
+      return 'missing';
+    }
+    return this.activeIdeFile.status === 'saved' ? 'saved' : this.activeIdeFile.status;
+  }
+
+  get activeProblemCount(): number {
+    return this.filteredDiagnosticsBySource(this.allDiagnostics)
+      .filter((diagnostic) => diagnostic.path === this.activeIdeFile.path).length;
+  }
+
+  get problemSummary(): string {
+    const diagnostics = this.filteredDiagnosticsBySource(this.allDiagnostics);
+    const errors = diagnostics.filter((diagnostic) => diagnostic.severity === 'error').length;
+    const warnings = diagnostics.filter((diagnostic) => diagnostic.severity === 'warning').length;
+    if (errors === 0 && warnings === 0) {
+      return '0 problems';
+    }
+    return `${errors} errors · ${warnings} warnings`;
+  }
+
+  get editorStatusSummary(): string {
+    const base = `${this.activeFileStatusLabel} · ${this.activeIdeFile.lines.length} lines · Ln ${this.editorCursorLine}, Col ${this.editorCursorColumn} · ${this.activeLanguageStatusLabel}`;
+    if (this.activeIdeFile.lang === 'python') {
+      return `python · ${base} · ${this.pythonRunProfileSummary}`;
+    }
+    if (this.activeIdeFile.lang !== 'cpp') {
+      return `${this.activeIdeFile.lang} · ${base}`;
+    }
+    return `cpp · ${base} · ${this.cppRunProfileSummary}`;
+  }
+
+  get pythonRunProfileSummary(): string {
+    const args = this.profileArgs.trim() || 'no program args';
+    return `entry ${this.activeIdeFile.path} · ${this.pythonExecutable} · ${args}`;
+  }
+
+  get cppRunProfileSummary(): string {
+    const available = new Set(this.cppSourceCandidates.map((file) => file.path));
+    const selected = this.cppSelectedSources.filter((path) => available.has(path));
+    const sourceCount = this.activeIdeFile.lang === 'cpp' && !selected.includes(this.activeIdeFile.path)
+      ? selected.length + 1
+      : selected.length;
+    const compilerArgs = this.profileArgs.trim() || 'no compiler args';
+    const programArgs = this.cppProgramArgs.trim() || 'no program args';
+    return `entry ${this.activeIdeFile.path} · sources ${sourceCount} · ${compilerArgs} · ${programArgs}`;
+  }
+
+  get runStatusProfile(): RunProfile | null {
+    return this.pendingRunProfile ?? this.activeRunProfilePreview;
+  }
+
+  get runStatusProfileLabel(): string {
+    const profile = this.runStatusProfile;
+    if (!profile) {
+      return 'No runnable file';
+    }
+    return `${profile.name} · ${profile.language.toUpperCase()}`;
+  }
+
+  get runStatusEntryLabel(): string {
+    return this.runStatusProfile?.entryFile ?? this.activeIdeFile.path;
+  }
+
+  get runStatusToolchainLabel(): string {
+    const profile = this.runStatusProfile;
+    if (!profile) {
+      return 'No toolchain';
+    }
+    if (!this.isDesktop) {
+      return 'Browser preview runner';
+    }
+    if (!this.workspace?.trusted) {
+      return 'Trusted workspace required';
+    }
+    return profile.language === 'cpp'
+      ? `Compiler ${profile.command}`
+      : `Interpreter ${profile.command}`;
+  }
+
+  get runStatusArgsLabel(): string {
+    const profile = this.runStatusProfile;
+    if (!profile) {
+      return 'No args';
+    }
+    if (profile.language === 'cpp') {
+      const compilerArgs = profile.args?.join(' ') || 'no compiler args';
+      const programArgs = profile.programArgs?.join(' ') || 'no program args';
+      return `sources ${profile.sourceFiles?.length ?? 1} · ${compilerArgs} · ${programArgs}`;
+    }
+    return profile.args?.join(' ') || 'no program args';
+  }
+
+  get runStatusDirtyLabel(): string {
+    const profile = this.runStatusProfile;
+    if (!profile) {
+      return 'No disk inputs';
+    }
+    if (this.pendingRunProfile && this.pendingRunDirtyPath) {
+      return `Save required · ${this.pendingRunDirtyPath}`;
+    }
+    const dirtyInput = this.dirtyRunInputForProfile(profile);
+    if (dirtyInput) {
+      return `Dirty input · ${dirtyInput.path}`;
+    }
+    if (!this.isDesktop || !this.workspace) {
+      return 'Draft buffer run';
+    }
+    return 'Disk inputs clean';
+  }
+
+  get runStatusEvidenceLabel(): string {
+    const latest = this.recentRunResults[0];
+    if (latest) {
+      return `${latest.entryFile} · EXIT ${latest.exitCode} · ${latest.elapsedMs} ms`;
+    }
+    return this.isDesktop ? 'No run evidence yet' : `${this.lastRunTarget} · ${this.lastRunSummary}`;
+  }
+
+  get filteredRunDiagnostics(): EditorDiagnostic[] {
+    const diagnostics = this.filteredDiagnosticsBySource(this.allDiagnostics);
+    if (this.problemFilter === 'active') {
+      return diagnostics.filter((diagnostic) => diagnostic.path === this.activeIdeFile.path);
+    }
+    return diagnostics;
+  }
+
   get problemLines(): string[] {
-    if (this.isDesktop && this.runDiagnostics.length > 0) {
-      return this.runDiagnostics.map((diagnostic) =>
-        `${diagnostic.severity} L${diagnostic.line} · ${diagnostic.message}`);
+    if (this.isDesktop && this.allDiagnostics.length > 0) {
+      return this.allDiagnostics.map((diagnostic) =>
+        `${diagnostic.source ?? 'run'} ${diagnostic.severity} L${diagnostic.line} · ${diagnostic.message}`);
     }
 
     if (this.activeIdeFile.name === 'notes.md') {
@@ -883,6 +1413,32 @@ export class App implements OnInit, OnDestroy {
     }
 
     return ['NO PROBLEMS · CACHED RECURSION VERIFIED'];
+  }
+
+  get activeLanguageStatusLabel(): string {
+    if (!this.isDesktop || !this.workspace?.trusted) {
+      return 'LSP off';
+    }
+    if (this.activeIdeFile.lang === 'text') {
+      return this.spellCheckEnabled ? 'spell ready' : 'spell off';
+    }
+    const status = this.languageStatusFor(this.activeIdeFile.lang);
+    if (!status) {
+      return 'LSP idle';
+    }
+    return `${status.label} ${status.state}`;
+  }
+
+  isTrustedWorkspaceFile(file: IdeFile): boolean {
+    return Boolean(this.isDesktop && this.workspace?.trusted && file.workspaceFile && !file.missingOnDisk);
+  }
+
+  private filteredDiagnosticsBySource(diagnostics: EditorDiagnostic[]): EditorDiagnostic[] {
+    return this.languageStore.filteredBySource(diagnostics, this.problemSourceFilter);
+  }
+
+  private languageStatusFor(language: EditorLanguage): LanguageServiceStatus | undefined {
+    return this.languageStore.statusFor(language);
   }
 
   get outputLines(): string[] {
@@ -913,6 +1469,18 @@ export class App implements OnInit, OnDestroy {
 
   get editorVerticalPaddingPx(): number {
     return this.editorDensity === 'compact' ? 8 : 12;
+  }
+
+  get editorFontFamily(): string {
+    return editorFontPreset(this.editorFontId).family;
+  }
+
+  get editorThemeVariables(): Record<string, string> {
+    return editorThemePreset(this.editorThemeId).variables;
+  }
+
+  get editorLayoutKey(): string {
+    return `${this.editorDensity}:${this.editorFontSizePx}:${this.editorLineHeightPx}:${this.editorVerticalPaddingPx}`;
   }
 
   focusScreen(screen: ScreenId): void {
@@ -965,7 +1533,9 @@ export class App implements OnInit, OnDestroy {
     }
     this.resizingRail = null;
     this.railResizeBounds = null;
-    this.saveRailWidths();
+    this.settingsStore.workspaceRailWidth = this.workspaceRailWidth;
+    this.settingsStore.explorerRailWidth = this.explorerRailWidth;
+    this.settingsStore.saveRailWidths();
   }
 
   @HostListener('window:blur')
@@ -1169,105 +1739,19 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  private loadStoredEditorDensity(): void {
-    if (typeof localStorage === 'undefined') {
-      return;
-    }
-    try {
-      const stored = localStorage.getItem(this.editorDensityStorageKey);
-      if (stored === 'compact' || stored === 'comfortable') {
-        this.editorDensity = stored;
-      }
-    } catch {
-      // Density is presentation state; keep the default if storage is unavailable.
-    }
-  }
-
-  private saveEditorDensity(): void {
-    if (typeof localStorage === 'undefined') {
-      return;
-    }
-    try {
-      localStorage.setItem(this.editorDensityStorageKey, this.editorDensity);
-    } catch {
-      // Ignore storage quota or privacy-mode failures.
-    }
-  }
-
-  private loadStoredEditorFontSize(): void {
-    if (typeof localStorage === 'undefined') {
-      return;
-    }
-    try {
-      const stored = localStorage.getItem(this.editorFontSizeStorageKey);
-      if (!stored) {
-        return;
-      }
-      this.editorFontSizePx = this.clampEditorFontSize(Number(stored));
-    } catch {
-      // Font size is presentation state; keep the default if storage is unavailable.
-    }
-  }
-
-  private saveEditorFontSize(): void {
-    if (typeof localStorage === 'undefined') {
-      return;
-    }
-    try {
-      localStorage.setItem(this.editorFontSizeStorageKey, String(this.editorFontSizePx));
-    } catch {
-      // Ignore storage quota or privacy-mode failures.
-    }
-  }
-
-  private loadStoredRailWidths(): void {
-    if (typeof localStorage === 'undefined') {
-      return;
-    }
-    try {
-      const stored = localStorage.getItem(this.railWidthStorageKey);
-      if (!stored) {
-        return;
-      }
-      const parsed = JSON.parse(stored) as StoredRailWidths;
-      if (typeof parsed?.workspace === 'number') {
-        this.workspaceRailWidth = this.clampRailWidth('workspace', parsed.workspace);
-      }
-      if (typeof parsed?.explorer === 'number') {
-        this.explorerRailWidth = this.clampRailWidth('explorer', parsed.explorer);
-      }
-    } catch {
-      // Rail widths are presentation state; keep defaults if storage is unavailable.
-    }
-  }
-
-  private saveRailWidths(): void {
-    if (typeof localStorage === 'undefined') {
-      return;
-    }
-    try {
-      localStorage.setItem(this.railWidthStorageKey, JSON.stringify({
-        workspace: this.workspaceRailWidth,
-        explorer: this.explorerRailWidth,
-      }));
-    } catch {
-      // Ignore storage quota or privacy-mode failures.
-    }
-  }
-
   private updateRailWidthFromPointer(clientX: number): void {
     if (!this.resizingRail || !this.railResizeBounds) {
       return;
     }
     if (this.resizingRail === 'workspace') {
-      this.workspaceRailWidth = this.clampRailWidth(
+      this.workspaceRailWidth = this.settingsStore.setRailWidth(
         'workspace',
         clientX - this.railResizeBounds.left,
         this.railResizeBounds.width,
       );
       return;
     }
-    this.explorerRailWidth = this.clampRailWidth(
+    this.explorerRailWidth = this.settingsStore.setRailWidth(
       'explorer',
       this.railResizeBounds.right - clientX,
       this.railResizeBounds.width,
@@ -1279,22 +1763,13 @@ export class App implements OnInit, OnDestroy {
     value: number,
     layoutWidth = Number.POSITIVE_INFINITY,
   ): number {
-    const minWidth = this.railMinWidths[target];
-    const hardMaxWidth = this.railMaxWidths[target];
-    const otherRailWidth = target === 'workspace' ? this.explorerRailWidth : this.workspaceRailWidth;
-    const layoutMaxWidth = Number.isFinite(layoutWidth)
-      ? Math.max(minWidth, layoutWidth - otherRailWidth - this.railCenterMinWidth)
-      : hardMaxWidth;
-    const maxWidth = Math.max(minWidth, Math.min(hardMaxWidth, layoutMaxWidth));
-    return Math.round(Math.min(Math.max(value, minWidth), maxWidth));
+    this.settingsStore.workspaceRailWidth = this.workspaceRailWidth;
+    this.settingsStore.explorerRailWidth = this.explorerRailWidth;
+    return this.settingsStore.clampRailWidth(target, value, layoutWidth);
   }
 
   private clampEditorFontSize(value: number): number {
-    if (!Number.isFinite(value)) {
-      return this.editorFontSizeDefault;
-    }
-    const rounded = Math.round(value * 2) / 2;
-    return Math.min(Math.max(rounded, this.editorFontSizeMin), this.editorFontSizeMax);
+    return this.settingsStore.clampEditorFontSize(value);
   }
 
   setRightPanel(panel: RightPanel): void {
@@ -1335,6 +1810,12 @@ export class App implements OnInit, OnDestroy {
       case 'delete':
         void this.deleteActiveFile();
         return;
+      case 'copy-path':
+        this.copyActiveFilePath();
+        return;
+      case 'reveal-active-file':
+        this.revealActiveFile();
+        return;
       case 'assist':
         this.showAssistantPanel();
         return;
@@ -1343,6 +1824,9 @@ export class App implements OnInit, OnDestroy {
 
   selectIdeFile(path: string): void {
     this.clearGitComparison();
+    if (this.renamingFilePath && this.renamingFilePath !== path) {
+      this.cancelRename();
+    }
     this.activeIdePath = path;
     this.activeChannelId = 'ide';
     this.activeChannelView = 'ide';
@@ -1356,43 +1840,28 @@ export class App implements OnInit, OnDestroy {
   }
 
   updateFileQuery(event: Event): void {
-    this.fileQuery = (event.target as HTMLInputElement).value;
-    this.rebuildExplorerTree();
+    this.explorerStore.setQuery((event.target as HTMLInputElement).value, this.visibleIdeFiles);
   }
 
   clearFileQuery(): void {
-    this.fileQuery = '';
-    this.rebuildExplorerTree();
+    this.explorerStore.clearQuery(this.visibleIdeFiles);
   }
 
   openQuickOpen(): void {
-    this.quickOpenVisible = true;
-    this.quickOpenQuery = '';
-    this.quickOpenIndex = Math.max(
-      0,
-      this.quickOpenResults.findIndex((file) => file.path === this.activeIdePath),
-    );
+    this.explorerStore.openQuickOpen(this.visibleIdeFiles, this.activeIdePath);
     this.openIde();
   }
 
   closeQuickOpen(): void {
-    this.quickOpenVisible = false;
-    this.quickOpenQuery = '';
-    this.quickOpenIndex = 0;
+    this.explorerStore.closeQuickOpen();
   }
 
   updateQuickOpenQuery(event: Event): void {
-    this.quickOpenQuery = (event.target as HTMLInputElement).value;
-    this.quickOpenIndex = 0;
+    this.explorerStore.updateQuickOpenQuery((event.target as HTMLInputElement).value);
   }
 
   moveQuickOpen(delta: number): void {
-    const results = this.quickOpenResults;
-    if (results.length === 0) {
-      this.quickOpenIndex = 0;
-      return;
-    }
-    this.quickOpenIndex = (this.quickOpenIndex + delta + results.length) % results.length;
+    this.explorerStore.moveQuickOpen(delta, this.visibleIdeFiles, this.activeIdePath);
   }
 
   selectQuickOpen(file = this.quickOpenResults[this.quickOpenIndex]): void {
@@ -1461,9 +1930,7 @@ export class App implements OnInit, OnDestroy {
     }
     const file = this.activeIdeFile;
     file.lines = content.split('\n');
-    this.runDiagnostics = this.runDiagnostics.filter(
-      (diagnostic) => diagnostic.path !== file.path,
-    );
+    this.runnerStore.clearDiagnosticsForPath(file.path);
     if (this.conflictCompareOpen) {
       this.refreshConflictComparison();
     }
@@ -1474,6 +1941,7 @@ export class App implements OnInit, OnDestroy {
     if (this.isDesktop && this.workspace?.trusted && file.workspaceFile) {
       this.scheduleRecoveryBuffer(file.path, content);
       this.scheduleAutoSave(file.path, content);
+      this.scheduleLanguageDocumentSync(file);
     }
   }
 
@@ -1518,6 +1986,24 @@ export class App implements OnInit, OnDestroy {
       return;
     }
 
+    if (primary && key === 'f') {
+      event.preventDefault();
+      this.openEditorSearch();
+      return;
+    }
+
+    if (primary && key === 'g') {
+      event.preventDefault();
+      this.openGoToLine();
+      return;
+    }
+
+    if (primary && key === '/') {
+      event.preventDefault();
+      this.toggleShortcutPanel();
+      return;
+    }
+
     if (this.quickOpenVisible) {
       if (key === 'escape') {
         event.preventDefault();
@@ -1539,6 +2025,18 @@ export class App implements OnInit, OnDestroy {
         this.selectQuickOpen();
         return;
       }
+    }
+
+    if (this.goToLineOpen && key === 'escape') {
+      event.preventDefault();
+      this.closeGoToLine();
+      return;
+    }
+
+    if (this.shortcutPanelOpen && key === 'escape') {
+      event.preventDefault();
+      this.shortcutPanelOpen = false;
+      return;
     }
 
     if (this.activeChannelView !== 'ide' || !primary || key !== 's') {
@@ -1628,9 +2126,166 @@ export class App implements OnInit, OnDestroy {
     this.openConsolePanel(panel);
   }
 
+  showAllProblems(): void {
+    this.problemFilter = 'all';
+    this.problemSourceFilter = 'all';
+  }
+
+  setProblemFilter(filter: 'all' | 'active'): void {
+    this.problemFilter = filter;
+  }
+
+  setProblemSourceFilter(filter: 'all' | 'run' | 'lsp' | 'spell'): void {
+    this.problemSourceFilter = this.problemSourceFilter === filter && filter !== 'all' ? 'all' : filter;
+  }
+
+  updateEditorCursor(position: { line: number; column: number }): void {
+    this.editorCursorLine = position.line;
+    this.editorCursorColumn = position.column;
+  }
+
+  openEditorSearch(): void {
+    this.editorSearchRequest += 1;
+  }
+
+  goToDefinitionAtCursor(): void {
+    this.editorDefinitionRequest += 1;
+  }
+
+  async openDefinition(position: EditorLanguagePosition): Promise<void> {
+    if (!this.workspace?.trusted || !window.codeyo?.language || !this.isTrustedWorkspaceFile(this.activeIdeFile)) {
+      this.workspaceNotice = 'TRUSTED WORKSPACE FILE REQUIRED FOR GO TO DEFINITION.';
+      this.renderDesktopState();
+      return;
+    }
+    try {
+      const result = await window.codeyo.language.definition(
+        this.workspace.id,
+        this.languageRequestFor(this.activeIdeFile, position),
+      );
+      const location = result.locations[0];
+      if (!result.available || !location) {
+        this.workspaceNotice = `NO DEFINITION FOUND · ${this.activeIdeFile.path}`;
+        this.renderDesktopState();
+        return;
+      }
+      await this.openLanguageLocation(location);
+    } catch (error) {
+      this.workspaceNotice = this.desktopError(error, `GO TO DEFINITION FAILED · ${this.activeIdeFile.path}`);
+      this.renderDesktopState();
+    }
+  }
+
+  async formatActiveDocument(): Promise<void> {
+    const file = this.activeIdeFile;
+    if (this.homeMode || !this.workspace?.trusted || !window.codeyo?.language || !this.isTrustedWorkspaceFile(file)) {
+      this.workspaceNotice = 'TRUSTED WORKSPACE FILE REQUIRED FOR FORMAT.';
+      this.renderDesktopState();
+      return;
+    }
+    let result: LanguageFormatResult;
+    try {
+      result = await window.codeyo.language.formatDocument(this.workspace.id, this.languageDocumentFor(file));
+    } catch (error) {
+      this.workspaceNotice = this.desktopError(error, `FORMAT FAILED · ${file.path}`);
+      this.renderDesktopState();
+      return;
+    }
+    if (!result.available) {
+      this.workspaceNotice = `FORMAT UNAVAILABLE · ${this.formatUnavailableReason(result.reason)} · ${file.path}`;
+      this.renderDesktopState();
+      return;
+    }
+    const before = file.lines.join('\n');
+    const after = result.edit ? applyTextEdits(before, result.edit.edits) : before;
+    if (after === before) {
+      this.workspaceNotice = `ALREADY FORMATTED · ${file.path}`;
+      this.renderDesktopState();
+      return;
+    }
+    this.updateActiveFile(after);
+    this.workspaceNotice = `FORMATTED · ${file.path}`;
+    this.renderDesktopState();
+  }
+
+  private formatUnavailableReason(reason?: string): string {
+    switch (reason) {
+      case 'missing-tool':
+        return 'FORMATTER TOOL NOT FOUND';
+      case 'python-formatter-unconfigured':
+        return 'PYTHON FORMATTER NOT CONFIGURED';
+      default:
+        return (reason || 'UNSUPPORTED').toUpperCase();
+    }
+  }
+
+  openGoToLine(): void {
+    if (this.homeMode) {
+      return;
+    }
+    this.goToLineDraft = String(this.editorCursorLine || 1);
+    this.goToLineOpen = true;
+  }
+
+  updateGoToLineDraft(event: Event): void {
+    this.goToLineDraft = (event.target as HTMLInputElement).value;
+  }
+
+  closeGoToLine(): void {
+    this.goToLineOpen = false;
+    this.goToLineDraft = '';
+  }
+
+  submitGoToLine(): void {
+    const requested = Number.parseInt(this.goToLineDraft, 10);
+    if (!Number.isFinite(requested)) {
+      this.workspaceNotice = 'GO TO LINE NEEDS A LINE NUMBER.';
+      this.renderDesktopState();
+      return;
+    }
+    const line = Math.min(Math.max(1, requested), Math.max(1, this.activeIdeFile.lines.length));
+    this.diagnosticRevealLine = line;
+    this.diagnosticRevealColumn = 1;
+    this.diagnosticRevealRequest += 1;
+    this.editorCursorLine = line;
+    this.editorCursorColumn = 1;
+    this.closeGoToLine();
+  }
+
+  toggleShortcutPanel(): void {
+    this.shortcutPanelOpen = !this.shortcutPanelOpen;
+  }
+
+  confirmAction(request: ConfirmDialogRequest): Promise<boolean> {
+    if (this.confirmDialogResolver) {
+      this.confirmDialogResolver(false);
+    }
+    this.confirmDialog = request;
+    this.renderDesktopState();
+    return new Promise((resolve) => {
+      this.confirmDialogResolver = resolve;
+    });
+  }
+
+  confirmDialogAccept(): void {
+    this.closeConfirmDialog(true);
+  }
+
+  confirmDialogCancel(): void {
+    this.closeConfirmDialog(false);
+  }
+
+  private closeConfirmDialog(confirmed: boolean): void {
+    const resolver = this.confirmDialogResolver;
+    this.confirmDialogResolver = null;
+    this.confirmDialog = null;
+    resolver?.(confirmed);
+    this.renderDesktopState();
+  }
+
   setEditorDensity(density: EditorDensity): void {
-    this.editorDensity = density;
-    this.saveEditorDensity();
+    this.settingsStore.setEditorDensity(density);
+    this.editorDensity = this.settingsStore.editorDensity;
   }
 
   updateEditorFontSize(event: Event): void {
@@ -1642,12 +2297,23 @@ export class App implements OnInit, OnDestroy {
   }
 
   resetEditorFontSize(): void {
-    this.setEditorFontSize(this.editorFontSizeDefault);
+    this.settingsStore.resetEditorFontSize();
+    this.editorFontSizePx = this.settingsStore.editorFontSizePx;
   }
 
   setEditorFontSize(value: number): void {
-    this.editorFontSizePx = this.clampEditorFontSize(value);
-    this.saveEditorFontSize();
+    this.settingsStore.setEditorFontSize(value);
+    this.editorFontSizePx = this.settingsStore.editorFontSizePx;
+  }
+
+  setEditorFont(id: EditorFontId): void {
+    this.settingsStore.setEditorFont(id);
+    this.editorFontId = this.settingsStore.editorFontId;
+  }
+
+  setEditorTheme(id: EditorThemeId): void {
+    this.settingsStore.setEditorTheme(id);
+    this.editorThemeId = this.settingsStore.editorThemeId;
   }
 
   toggleAutoSave(): void {
@@ -1655,17 +2321,71 @@ export class App implements OnInit, OnDestroy {
   }
 
   setAutoSave(enabled: boolean): void {
-    this.autoSaveEnabled = enabled;
+    this.projectSettingsStore.update(this.workspace, 'autoSaveEnabled', enabled);
     if (!this.autoSaveEnabled) {
       for (const timer of this.autoSaveTimers.values()) {
         clearTimeout(timer);
       }
       this.autoSaveTimers.clear();
     }
-    this.writeWorkspaceBooleanSetting('auto-save', this.autoSaveEnabled);
     this.workspaceNotice = this.autoSaveEnabled
       ? `AUTO-SAVE ENABLED · ${this.autoSaveDelayMs / 1000}s DEBOUNCE`
       : 'AUTO-SAVE DISABLED';
+    this.writeWorkspaceBooleanSetting('auto-save', this.autoSaveEnabled);
+    this.renderDesktopState();
+  }
+
+  setLspDiagnostics(enabled: boolean): void {
+    this.lspDiagnosticsEnabled = enabled;
+    this.projectSettingsStore.update(this.workspace, 'lspDiagnosticsEnabled', enabled);
+    this.writeWorkspaceBooleanSetting('lsp-diagnostics', enabled);
+    if (!enabled) {
+      this.lspDiagnostics = [];
+    } else {
+      this.syncActiveLanguageDocument('change');
+    }
+    this.workspaceNotice = enabled ? 'LSP DIAGNOSTICS ENABLED' : 'LSP DIAGNOSTICS DISABLED';
+    this.renderDesktopState();
+  }
+
+  setAutocomplete(enabled: boolean): void {
+    this.autocompleteEnabled = enabled;
+    this.projectSettingsStore.update(this.workspace, 'autocompleteEnabled', enabled);
+    this.writeWorkspaceBooleanSetting('autocomplete', enabled);
+    this.workspaceNotice = enabled ? 'AUTOCOMPLETE ENABLED' : 'AUTOCOMPLETE DISABLED';
+    this.renderDesktopState();
+  }
+
+  setSpellCheck(enabled: boolean): void {
+    this.spellCheckEnabled = enabled;
+    this.projectSettingsStore.update(this.workspace, 'spellCheckEnabled', enabled);
+    this.writeWorkspaceBooleanSetting('spell-check', enabled);
+    if (!enabled) {
+      this.spellDiagnostics = [];
+    } else {
+      this.syncActiveLanguageDocument('change');
+    }
+    this.workspaceNotice = enabled ? 'SPELL CHECK ENABLED' : 'SPELL CHECK DISABLED';
+    this.renderDesktopState();
+  }
+
+  setFormatOnSave(enabled: boolean): void {
+    this.projectSettingsStore.update(this.workspace, 'formatOnSaveEnabled', enabled);
+    this.workspaceNotice = enabled
+      ? 'FORMAT ON SAVE ENABLED · FORMATTER REQUIRED'
+      : 'FORMAT ON SAVE DISABLED';
+    this.renderDesktopState();
+  }
+
+  updatePythonFormatter(event: Event): void {
+    this.projectSettingsStore.update(
+      this.workspace,
+      'pythonFormatterCommand',
+      (event.target as HTMLInputElement).value,
+    );
+    this.workspaceNotice = this.pythonFormatterCommand
+      ? `PYTHON FORMATTER · ${this.pythonFormatterCommand}`
+      : 'PYTHON FORMATTER CLEARED';
     this.renderDesktopState();
   }
 
@@ -1699,21 +2419,13 @@ export class App implements OnInit, OnDestroy {
   }
 
   toggleExplorerFolder(folderPath: string): void {
-    if (this.expandedExplorerDirs.has(folderPath)) {
-      this.expandedExplorerDirs.delete(folderPath);
-    } else {
-      this.expandedExplorerDirs.add(folderPath);
-    }
-    this.scheduleExplorerTreeRebuild();
-  }
-
-  treeNodePadding(depth: number): number {
-    return 7 + depth * 13;
+    this.explorerStore.toggleFolder(folderPath, this.visibleIdeFiles);
+    this.renderDesktopState();
   }
 
   startNewFile(): void {
     this.workspaceExpanded = true;
-    this.fileQuery = '';
+    this.explorerStore.clearQuery(this.visibleIdeFiles);
     this.creatingFile = true;
     this.newFileName = '';
     this.rebuildExplorerTree();
@@ -1727,6 +2439,47 @@ export class App implements OnInit, OnDestroy {
     this.creatingFile = false;
     this.newFileName = '';
     this.rebuildExplorerTree();
+  }
+
+  updateRenameDraft(event: Event): void {
+    this.renameDraft = (event.target as HTMLInputElement).value;
+  }
+
+  cancelRename(): void {
+    this.renamingFilePath = '';
+    this.renameDraft = '';
+  }
+
+  commitRename(): void {
+    const previousPath = this.renamingFilePath || this.activeIdeFile.path;
+    const nextPath = this.renameDraft.trim();
+    if (!nextPath || nextPath === previousPath) {
+      this.cancelRename();
+      return;
+    }
+    if (this.ideFiles.some((file) => file.path === nextPath && file.path !== previousPath)) {
+      this.workspaceNotice = `RENAME FAILED · ${nextPath} ALREADY EXISTS`;
+      this.renderDesktopState();
+      return;
+    }
+    if (this.isDesktop && this.workspace) {
+      this.cancelRename();
+      void this.renameDesktopFile(nextPath);
+      return;
+    }
+
+    const file = this.ideFiles.find((candidate) => candidate.path === previousPath);
+    if (!file) {
+      this.cancelRename();
+      return;
+    }
+    file.path = nextPath;
+    file.name = nextPath.split(/[\\/]/).pop() || nextPath;
+    file.lang = this.languageForPath(nextPath);
+    this.activeIdePath = nextPath;
+    this.cancelRename();
+    this.rebuildExplorerTree();
+    this.workspaceNotice = `RENAMED FILE · ${previousPath} -> ${nextPath}`;
   }
 
   createFile(): void {
@@ -1759,7 +2512,7 @@ export class App implements OnInit, OnDestroy {
     this.rebuildExplorerTree();
     this.creatingFile = false;
     this.newFileName = '';
-    this.fileQuery = '';
+    this.explorerStore.clearQuery(this.visibleIdeFiles);
     this.selectIdeFile(name);
     this.runOutput = [`$ touch ${name}`, 'new buffer created', 'ready for collaboration'];
     this.activeConsolePanel = 'terminal';
@@ -1800,7 +2553,7 @@ export class App implements OnInit, OnDestroy {
     this.activeConsolePanel = 'terminal';
   }
 
-  deleteActiveFile(): void {
+  async deleteActiveFile(): Promise<void> {
     if (!this.canDeleteActiveFile) {
       return;
     }
@@ -1811,7 +2564,14 @@ export class App implements OnInit, OnDestroy {
         this.renderDesktopState();
         return;
       }
-      if (window.confirm(`Delete ${this.activeIdeFile.path} from this workspace? This cannot be undone.`)) {
+      if (await this.confirmAction({
+        title: 'Delete file?',
+        message: `Delete ${this.activeIdeFile.path} from this workspace?`,
+        details: 'This cannot be undone.',
+        confirmLabel: 'Delete',
+        cancelLabel: 'Cancel',
+        variant: 'danger',
+      })) {
         void this.removeDesktopFile();
       }
       return;
@@ -1826,19 +2586,56 @@ export class App implements OnInit, OnDestroy {
   }
 
   renameActiveFile(): void {
-    if (!this.isDesktop || !this.workspace?.trusted || !window.codeyo) {
+    if (this.isDesktop && (!this.workspace?.trusted || !window.codeyo)) {
       return;
     }
-    if (this.activeIdeFile.status !== 'saved') {
+    if (this.isDesktop && this.activeIdeFile.status !== 'saved') {
       this.workspaceNotice = `SAVE BUFFER BEFORE RENAMING · ${this.activeIdeFile.path}`;
       this.renderDesktopState();
       return;
     }
-    const nextPath = window.prompt('Rename workspace file to:', this.activeIdeFile.path)?.trim();
-    if (!nextPath || nextPath === this.activeIdeFile.path) {
+    if (!this.canDeleteActiveFile) {
       return;
     }
-    void this.renameDesktopFile(nextPath);
+    this.renamingFilePath = this.activeIdeFile.path;
+    this.renameDraft = this.activeIdeFile.path;
+    this.revealActiveFile(false);
+  }
+
+  copyActiveFilePath(): void {
+    const filePath = this.activeIdeFile.path;
+    const clipboard = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
+    if (clipboard?.writeText) {
+      void clipboard.writeText(filePath)
+        .then(() => {
+          this.workspaceNotice = `COPIED PATH · ${filePath}`;
+          this.renderDesktopState();
+        })
+        .catch(() => {
+          this.workspaceNotice = `PATH · ${filePath}`;
+          this.renderDesktopState();
+        });
+      return;
+    }
+    this.workspaceNotice = `PATH · ${filePath}`;
+    this.renderDesktopState();
+  }
+
+  revealActiveFile(showNotice = true): void {
+    this.workspaceExpanded = true;
+    this.explorerStore.expandParents([this.activeIdeFile]);
+    this.rebuildExplorerTree();
+    setTimeout(() => {
+      const rows = Array.from(document.querySelectorAll<HTMLElement>('.tree-node.file[data-path]'));
+      const row = rows.find((element) => element.getAttribute('data-path') === this.activeIdeFile.path);
+      if (typeof row?.scrollIntoView === 'function') {
+        row.scrollIntoView({ block: 'nearest' });
+      }
+    });
+    if (showNotice) {
+      this.workspaceNotice = `REVEALED FILE · ${this.activeIdeFile.path}`;
+      this.renderDesktopState();
+    }
   }
 
   clearTerminal(): void {
@@ -2131,6 +2928,33 @@ export class App implements OnInit, OnDestroy {
     ];
   }
 
+  cancelPendingRun(): void {
+    this.runnerStore.clearPendingRun();
+    this.workspaceNotice = 'RUN CANCELLED.';
+    this.renderDesktopState();
+  }
+
+  async saveAndRunPending(): Promise<void> {
+    const profile = this.pendingRunProfile;
+    if (!profile) {
+      return;
+    }
+    const runInputs = new Set([profile.entryFile, ...(profile.sourceFiles ?? [])]);
+    const dirtyInputs = this.ideFiles.filter(
+      (file) => runInputs.has(file.path) && file.workspaceFile && file.status !== 'saved',
+    );
+    for (const file of dirtyInputs) {
+      await this.saveDesktopDocument(file.path);
+      if (file.status !== 'saved') {
+        this.workspaceNotice = `SAVE AND RUN PAUSED · ${file.path}`;
+        this.renderDesktopState();
+        return;
+      }
+    }
+    this.runnerStore.clearPendingRun();
+    await this.runDesktopProfile(profile);
+  }
+
   private findIdeFile(name: string): IdeFile | undefined {
     const requested = name.trim().toLowerCase();
     return this.ideFiles.find((file) =>
@@ -2147,17 +2971,19 @@ export class App implements OnInit, OnDestroy {
   private setPythonExecutable(command: string): void {
     this.pythonExecutable = command;
     this.environmentChecks = [];
+    this.projectSettingsStore.update(this.workspace, 'pythonCommand', command);
     this.writeWorkspaceStringSetting('python-command', command);
   }
 
   private setCppExecutable(command: string): void {
     this.cppExecutable = command;
     this.environmentChecks = [];
+    this.projectSettingsStore.update(this.workspace, 'cppCommand', command);
     this.writeWorkspaceStringSetting('cpp-command', command);
   }
 
   private dirtyWorkspaceFiles(): IdeFile[] {
-    return this.ideFiles.filter((file) => file.workspaceFile && file.status !== 'saved');
+    return this.workspaceStore.dirtyWorkspaceFiles(this.ideFiles);
   }
 
   private scheduleRecoveryBuffer(filePath: string, content: string): void {
@@ -2209,6 +3035,103 @@ export class App implements OnInit, OnDestroy {
       clearTimeout(timer);
     }
     this.autoSaveTimers.clear();
+    this.languageStore.clearChangeTimers();
+  }
+
+  private syncActiveLanguageDocument(action: 'open' | 'change'): void {
+    this.syncLanguageDocument(this.activeIdeFile, action);
+  }
+
+  private syncLanguageDocument(file: IdeFile, action: 'open' | 'change'): void {
+    if (!this.workspace?.trusted || !window.codeyo?.language || !this.isTrustedWorkspaceFile(file)) {
+      return;
+    }
+    if (file.lang === 'text' && !this.spellCheckEnabled) {
+      return;
+    }
+    const document = this.languageDocumentFor(file);
+    const request = action === 'open'
+      ? window.codeyo.language.openDocument(this.workspace.id, document)
+      : window.codeyo.language.changeDocument(this.workspace.id, document);
+    request.catch((error) => {
+      this.workspaceNotice = this.desktopError(error, `LANGUAGE SERVICE UPDATE FAILED · ${file.path}`);
+      this.renderDesktopState();
+    });
+  }
+
+  private scheduleLanguageDocumentSync(file: IdeFile): void {
+    if (!this.workspace?.trusted || !this.isTrustedWorkspaceFile(file)) {
+      return;
+    }
+    this.languageStore.scheduleChange(file.path, () => {
+      this.syncLanguageDocument(file, 'change');
+    });
+  }
+
+  private languageDocumentFor(file: IdeFile) {
+    const content = file.lines.join('\n');
+    return {
+      path: file.path,
+      language: file.lang,
+      content,
+      version: this.languageStore.nextDocumentVersion(file.path),
+      spellRanges: this.spellCheckEnabled ? extractSpellCheckRegions(content, file.lang) : [],
+    };
+  }
+
+  private languageRequestFor(file: IdeFile, position: EditorLanguagePosition) {
+    return {
+      ...this.languageDocumentFor(file),
+      line: position.line,
+      column: position.column,
+    };
+  }
+
+  private applyLanguageDiagnostics(event: { workspaceId: string; path: string; source: 'lsp' | 'spell'; diagnostics: EditorDiagnostic[] }): void {
+    if (!this.workspace || !this.languageStore.applyDiagnostics(event, this.workspace.id)) {
+      return;
+    }
+    this.renderDesktopState();
+  }
+
+  private applyLanguageStatus(event: LanguageServiceStatus & { workspaceId: string }): void {
+    if (!this.workspace || !this.languageStore.applyStatus(event, this.workspace.id)) {
+      return;
+    }
+    this.renderDesktopState();
+  }
+
+  private async refreshLanguageStatus(): Promise<void> {
+    if (!this.workspace?.trusted || !window.codeyo?.language) {
+      this.languageWorkspaceStatus = null;
+      return;
+    }
+    try {
+      this.languageWorkspaceStatus = await window.codeyo.language.status(this.workspace.id);
+    } catch (error) {
+      this.workspaceNotice = this.desktopError(error, 'LANGUAGE SERVICE STATUS FAILED');
+    }
+  }
+
+  private async openLanguageLocation(location: LanguageDefinitionLocation): Promise<void> {
+    const file = this.ideFiles.find((candidate) => candidate.path === location.path);
+    if (!file) {
+      this.workspaceNotice = `DEFINITION FILE NOT FOUND · ${location.path}`;
+      this.renderDesktopState();
+      return;
+    }
+    this.activeIdePath = file.path;
+    this.activeChannelId = 'ide';
+    this.activeChannelView = 'ide';
+    this.activeRightPanel = 'files';
+    if (file.workspaceFile && file.status === 'saved') {
+      await this.loadDesktopDocument(file.path);
+    }
+    this.diagnosticRevealLine = location.line;
+    this.diagnosticRevealColumn = location.column;
+    this.diagnosticRevealRequest += 1;
+    this.workspaceNotice = `DEFINITION · ${location.path}:${location.line}:${location.column}`;
+    this.renderDesktopState();
   }
 
   private readWorkspaceBooleanSetting(
@@ -2292,129 +3215,6 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  private quickOpenDefaultScore(file: IdeFile): number {
-    const state = file.path === this.activeIdePath ? 0 : file.status !== 'saved' ? 1 : 2;
-    return state + file.path.length / 1000;
-  }
-
-  private addExplorerFile(root: ExplorerTreeNode, file: IdeFile): void {
-    const parts = file.path.split(/[\\/]/).filter(Boolean);
-    const fileName = parts.pop() || file.name;
-    let current = root;
-    let currentPath = '';
-    for (const part of parts) {
-      currentPath = currentPath ? `${currentPath}/${part}` : part;
-      let folder = current.children.get(part);
-      if (!folder) {
-        folder = {
-          name: part,
-          path: currentPath,
-          kind: 'folder',
-          children: new Map<string, ExplorerTreeNode>(),
-        };
-        current.children.set(part, folder);
-      }
-      current = folder;
-    }
-    current.children.set(fileName, {
-      name: fileName,
-      path: file.path,
-      kind: 'file',
-      children: new Map<string, ExplorerTreeNode>(),
-      file,
-    });
-  }
-
-  private flattenExplorerChildren(
-    children: Map<string, ExplorerTreeNode>,
-    depth: number,
-  ): ExplorerTreeEntry[] {
-    const entries = [...children.values()].sort((left, right) => {
-      if (left.kind !== right.kind) {
-        return left.kind === 'folder' ? -1 : 1;
-      }
-      return left.name.localeCompare(right.name);
-    });
-    return entries.flatMap((node) => {
-      if (node.kind === 'file') {
-        return [{
-          id: `file:${node.path}`,
-          name: node.name,
-          path: node.path,
-          kind: 'file',
-          depth,
-          file: node.file,
-        }];
-      }
-      const expanded = this.expandedExplorerDirs.has(node.path);
-      return [
-        {
-          id: `folder:${node.path}`,
-          name: node.name,
-          path: node.path,
-          kind: 'folder',
-          depth,
-          expanded,
-        },
-        ...(expanded ? this.flattenExplorerChildren(node.children, depth + 1) : []),
-      ];
-    });
-  }
-
-  private expandExplorerParents(files: IdeFile[]): void {
-    for (const file of files) {
-      const parts = file.path.split(/[\\/]/).filter(Boolean);
-      parts.pop();
-      let current = '';
-      for (const part of parts) {
-        current = current ? `${current}/${part}` : part;
-        this.expandedExplorerDirs.add(current);
-      }
-    }
-  }
-
-  private quickOpenScore(file: IdeFile, query: string): number {
-    const terms = query.split(/\s+/).filter(Boolean);
-    if (terms.length > 1) {
-      return terms.reduce((total, term) => {
-        if (!Number.isFinite(total)) {
-          return total;
-        }
-        const score = this.quickOpenScore(file, term);
-        return Number.isFinite(score) ? total + score : Number.POSITIVE_INFINITY;
-      }, 0);
-    }
-
-    const pathScore = this.quickOpenTextScore(file.path.toLowerCase(), query);
-    const nameScore = this.quickOpenTextScore(file.name.toLowerCase(), query);
-    return Math.min(pathScore, nameScore + 0.5);
-  }
-
-  private quickOpenTextScore(text: string, query: string): number {
-    if (text === query) {
-      return 0;
-    }
-    if (text.startsWith(query)) {
-      return 2 + text.length / 1000;
-    }
-    const index = text.indexOf(query);
-    if (index >= 0) {
-      return 8 + index / 100 + text.length / 1000;
-    }
-
-    let cursor = 0;
-    let gaps = 0;
-    for (const char of query) {
-      const next = text.indexOf(char, cursor);
-      if (next === -1) {
-        return Number.POSITIVE_INFINITY;
-      }
-      gaps += Math.max(0, next - cursor);
-      cursor = next + 1;
-    }
-    return 30 + gaps + text.length / 1000;
-  }
-
   private currentTime(): string {
     return new Date().toLocaleTimeString([], {
       hour: '2-digit',
@@ -2423,7 +3223,7 @@ export class App implements OnInit, OnDestroy {
   }
 
   async openDesktopWorkspace(): Promise<void> {
-    if (!this.confirmWorkspaceChange()) {
+    if (!(await this.confirmWorkspaceChange())) {
       return;
     }
     try {
@@ -2441,7 +3241,7 @@ export class App implements OnInit, OnDestroy {
     if (!this.recentWorkspace || !window.codeyo) {
       return;
     }
-    if (!this.confirmWorkspaceChange()) {
+    if (!(await this.confirmWorkspaceChange())) {
       return;
     }
     try {
@@ -2459,8 +3259,8 @@ export class App implements OnInit, OnDestroy {
     }
     const openTerminalAfterTrust = this.terminalRequestedAfterTrust;
     try {
-      this.workspace = await window.codeyo.workspace.trust(this.workspace.id);
-      this.workspaceNotice = `${this.workspace.name} · TRUSTED · EXECUTION ENABLED`;
+      const trustedWorkspace = await window.codeyo.workspace.trust(this.workspace.id);
+      this.workspaceStore.trustActive(trustedWorkspace);
       this.workspaceTrustPromptOpen = false;
       this.terminalRequestedAfterTrust = false;
       const [, journalLoaded, recoveriesLoaded] = await Promise.all([
@@ -2469,6 +3269,8 @@ export class App implements OnInit, OnDestroy {
         this.refreshRecoveries({ noticeOnFailure: false }),
       ]);
       this.appendWorkspaceSidecarWarning(journalLoaded, recoveriesLoaded, true);
+      await this.refreshLanguageStatus();
+      this.syncActiveLanguageDocument('open');
       if (openTerminalAfterTrust) {
         this.openConsolePanel('terminal');
       }
@@ -2560,8 +3362,15 @@ export class App implements OnInit, OnDestroy {
     this.renderDesktopState();
   }
 
-  discardGitFile(filePath: string): void {
-    if (window.confirm(`Discard all working changes in ${filePath}? This cannot be undone.`)) {
+  async discardGitFile(filePath: string): Promise<void> {
+    if (await this.confirmAction({
+      title: 'Discard changes?',
+      message: `Discard all working changes in ${filePath}?`,
+      details: 'This cannot be undone.',
+      confirmLabel: 'Discard',
+      cancelLabel: 'Cancel',
+      variant: 'danger',
+    })) {
       void this.gitAction({ type: 'discard', path: filePath, confirmed: true });
     }
   }
@@ -2956,24 +3765,38 @@ export class App implements OnInit, OnDestroy {
     this.selectedBranch = (event.target as HTMLSelectElement).value;
   }
 
-  switchBranch(): void {
+  async switchBranch(): Promise<void> {
     if (this.selectedBranch && this.selectedBranch !== this.gitStatus?.branch) {
       if (this.blockGitOperationWithUnsavedBuffers('SWITCH BRANCH')) {
         return;
       }
       if ((this.stagedGitFiles.length > 0 || this.unstagedGitFiles.length > 0) &&
-        !window.confirm(`Switch to ${this.selectedBranch} with local Git changes? Git may carry or reject them.`)) {
+        !(await this.confirmAction({
+          title: 'Switch branch?',
+          message: `Switch to ${this.selectedBranch} with local Git changes?`,
+          details: 'Git may carry or reject those changes.',
+          confirmLabel: 'Switch',
+          cancelLabel: 'Cancel',
+          variant: 'warning',
+        }))) {
         return;
       }
       void this.gitAction({ type: 'switch-branch', name: this.selectedBranch });
     }
   }
 
-  deleteSelectedBranch(): void {
+  async deleteSelectedBranch(): Promise<void> {
     if (!this.canDeleteSelectedBranch) {
       return;
     }
-    if (window.confirm(`Delete local branch ${this.selectedBranch}? This cannot be undone.`)) {
+    if (await this.confirmAction({
+      title: 'Delete branch?',
+      message: `Delete local branch ${this.selectedBranch}?`,
+      details: 'This cannot be undone.',
+      confirmLabel: 'Delete Branch',
+      cancelLabel: 'Cancel',
+      variant: 'danger',
+    })) {
       void this.gitAction({ type: 'delete-branch', name: this.selectedBranch, confirmed: true });
     }
   }
@@ -2985,7 +3808,7 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  pullRemote(): void {
+  async pullRemote(): Promise<void> {
     if (!this.gitStatus) {
       return;
     }
@@ -2993,7 +3816,14 @@ export class App implements OnInit, OnDestroy {
       return;
     }
     if ((this.stagedGitFiles.length > 0 || this.unstagedGitFiles.length > 0) &&
-      !window.confirm('Pull with local changes in this workspace? Git may require conflict resolution.')) {
+      !(await this.confirmAction({
+        title: 'Pull with local changes?',
+        message: 'Pull with local changes in this workspace?',
+        details: 'Git may require conflict resolution.',
+        confirmLabel: 'Pull',
+        cancelLabel: 'Cancel',
+        variant: 'warning',
+      }))) {
       return;
     }
     void this.gitAction({ type: 'pull' });
@@ -3041,11 +3871,11 @@ export class App implements OnInit, OnDestroy {
   }
 
   updateProfileArgs(event: Event): void {
-    this.profileArgs = (event.target as HTMLInputElement).value;
+    this.projectSettingsStore.update(this.workspace, 'profileArgs', (event.target as HTMLInputElement).value);
   }
 
   updateCppProgramArgs(event: Event): void {
-    this.cppProgramArgs = (event.target as HTMLInputElement).value;
+    this.projectSettingsStore.update(this.workspace, 'cppProgramArgs', (event.target as HTMLInputElement).value);
   }
 
   isCppSourceSelected(filePath: string): boolean {
@@ -3108,10 +3938,6 @@ export class App implements OnInit, OnDestroy {
       this.environmentBusy = false;
       this.renderDesktopState();
     }
-  }
-
-  toolCheckStatus(check: ToolCheckResult): string {
-    return check.available ? 'Ready' : 'Missing';
   }
 
   updateJournalDraft(event: Event): void {
@@ -3209,7 +4035,14 @@ export class App implements OnInit, OnDestroy {
     if (!this.workspace?.trusted || !window.codeyo) {
       return;
     }
-    if (!window.confirm(`Discard recovery buffer for ${buffer.filePath}? This cannot be undone.`)) {
+    if (!(await this.confirmAction({
+      title: 'Discard recovery?',
+      message: `Discard recovery buffer for ${buffer.filePath}?`,
+      details: 'This cannot be undone.',
+      confirmLabel: 'Discard',
+      cancelLabel: 'Cancel',
+      variant: 'danger',
+    }))) {
       return;
     }
     try {
@@ -3228,10 +4061,24 @@ export class App implements OnInit, OnDestroy {
     }
     let addToGitignore = false;
     if (mode === 'workspace-codeyo') {
-      if (!window.confirm('Write portable journal data to .codeyo/ in this workspace?')) {
+      if (!(await this.confirmAction({
+        title: 'Enable portable storage?',
+        message: 'Write portable journal data to .codeyo/ in this workspace?',
+        details: 'This creates local Codeyo metadata inside the trusted workspace.',
+        confirmLabel: 'Write .codeyo/',
+        cancelLabel: 'Cancel',
+        variant: 'warning',
+      }))) {
         return;
       }
-      addToGitignore = window.confirm('Add .codeyo/ to this project .gitignore?');
+      addToGitignore = await this.confirmAction({
+        title: 'Update .gitignore?',
+        message: 'Add .codeyo/ to this project .gitignore?',
+        details: 'Recommended for private local journal, recovery, and run evidence files.',
+        confirmLabel: 'Add to .gitignore',
+        cancelLabel: 'Skip',
+        variant: 'default',
+      });
     }
     this.storageBusy = true;
     try {
@@ -3283,9 +4130,7 @@ export class App implements OnInit, OnDestroy {
       this.activeIdeFile.diskVersion = this.fileConflict.diskVersion;
       this.activeIdeFile.status = 'saved';
       this.activeIdeFile.missingOnDisk = false;
-      this.runDiagnostics = this.runDiagnostics.filter(
-        (diagnostic) => diagnostic.path !== filePath,
-      );
+      this.runnerStore.clearDiagnosticsForPath(filePath);
     } else {
       this.activeIdeFile.diskVersion = this.fileConflict.diskVersion;
       this.activeIdeFile.missingOnDisk = Boolean(this.fileConflict.deleted);
@@ -3302,55 +4147,75 @@ export class App implements OnInit, OnDestroy {
     try {
       const recent = await window.codeyo?.workspace.recent();
       if (recent && recent.length > 0) {
-        this.recentWorkspace = recent[0];
-        this.workspaceNotice = `RECENT · ${recent[0].name} · OPEN FOLDER TO RESUME`;
+        this.workspaceStore.setRecentWorkspace(recent[0]);
         this.renderDesktopState();
       }
     } catch {
-      this.recentWorkspace = null;
+      this.workspaceStore.setRecentWorkspace(null);
     }
   }
 
   private async activateDesktopWorkspace(workspace: WorkspaceHandle): Promise<void> {
     this.clearWorkspaceTimers();
-    this.workspace = workspace;
-    this.recentWorkspace = workspace;
+    this.workspaceStore.activate(workspace);
+    this.projectSettingsStore.load(workspace);
+    this.migrateLegacyProjectSettings(workspace);
     this.terminalPaneOpen = false;
     this.terminalRequestedAfterTrust = false;
-    this.autoSaveEnabled = this.readWorkspaceBooleanSetting(workspace, 'auto-save', false);
-    this.applyWorkspaceToolDefaults(workspace);
-    this.expandedExplorerDirs.clear();
+    this.lspDiagnosticsEnabled = this.projectSettingsStore.current.lspDiagnosticsEnabled;
+    this.autocompleteEnabled = this.projectSettingsStore.current.autocompleteEnabled;
+    this.spellCheckEnabled = this.projectSettingsStore.current.spellCheckEnabled;
+    this.explorerStore.clearExpanded();
     this.desktopOutput = [];
     this.runTaskTranscript = [];
     this.runTaskSequence = 0;
-    this.runDiagnostics = [];
-    this.recentRunResults = [];
+    this.runnerStore.resetWorkspaceState();
+    this.languageStore.resetWorkspaceState();
     this.recoveryBuffers = [];
     this.environmentChecks = [];
-    this.selectedReviewRunResultId = '';
-    this.clearGitComparison();
-    this.fileConflict = null;
-    this.conflictCompareOpen = false;
-    this.workspaceNotice = workspace.trusted
-      ? `${workspace.name} · TRUSTED LOCAL WORKSPACE`
-      : `${workspace.name} · READ ONLY UNTIL TRUSTED`;
+    this.gitStore.resetWorkspaceState();
     this.workspaceTrustPromptOpen = !workspace.trusted;
     await this.loadDesktopFiles();
+    await this.refreshLanguageStatus();
+    this.syncActiveLanguageDocument('open');
     this.renderDesktopState();
   }
 
-  private applyWorkspaceToolDefaults(workspace: WorkspaceHandle): void {
-    const defaultPython = workspace.platform === 'win32' ? 'python' : 'python3';
-    this.pythonExecutable = this.readWorkspaceStringSetting(workspace, 'python-command', defaultPython);
-    this.cppExecutable = this.readWorkspaceStringSetting(workspace, 'cpp-command', 'clang++');
+  private migrateLegacyProjectSettings(workspace: WorkspaceHandle): void {
+    if (typeof localStorage !== 'undefined' && localStorage.getItem(this.projectSettingsStore.storageKey(workspace))) {
+      return;
+    }
+    const legacyAutoSave = this.readWorkspaceBooleanSetting(workspace, 'auto-save', this.projectSettingsStore.current.autoSaveEnabled);
+    const legacyLsp = this.readWorkspaceBooleanSetting(workspace, 'lsp-diagnostics', this.projectSettingsStore.current.lspDiagnosticsEnabled);
+    const legacyAutocomplete = this.readWorkspaceBooleanSetting(workspace, 'autocomplete', this.projectSettingsStore.current.autocompleteEnabled);
+    const legacySpell = this.readWorkspaceBooleanSetting(workspace, 'spell-check', this.projectSettingsStore.current.spellCheckEnabled);
+    const legacyPython = this.readWorkspaceStringSetting(workspace, 'python-command', this.projectSettingsStore.current.pythonCommand);
+    const legacyCpp = this.readWorkspaceStringSetting(workspace, 'cpp-command', this.projectSettingsStore.current.cppCommand);
+    this.projectSettingsStore.current = {
+      ...this.projectSettingsStore.current,
+      autoSaveEnabled: legacyAutoSave,
+      lspDiagnosticsEnabled: legacyLsp,
+      autocompleteEnabled: legacyAutocomplete,
+      spellCheckEnabled: legacySpell,
+      pythonCommand: legacyPython,
+      cppCommand: legacyCpp,
+    };
+    this.projectSettingsStore.save(workspace);
   }
 
-  private confirmWorkspaceChange(): boolean {
+  private async confirmWorkspaceChange(): Promise<boolean> {
     if (!this.workspace || !this.canSaveAll) {
       return true;
     }
     this.flushDirtyRecoveryBuffersSync();
-    return window.confirm('This workspace has unsaved buffers. Switch workspaces without saving them? Recovery copies will be kept.');
+    return this.confirmAction({
+      title: 'Switch workspace?',
+      message: 'This workspace has unsaved buffers. Switch workspaces without saving them?',
+      details: 'Recovery copies will be kept.',
+      confirmLabel: 'Switch',
+      cancelLabel: 'Stay',
+      variant: 'warning',
+    });
   }
 
   private async refreshDesktopFileIndex(preserveBuffers: boolean): Promise<void> {
@@ -3375,7 +4240,7 @@ export class App implements OnInit, OnDestroy {
         workspaceFile: true,
       } satisfies IdeFile;
     });
-    this.expandExplorerParents(next);
+    this.explorerStore.expandParents(next);
     if (preserveBuffers) {
       for (const cached of previous.values()) {
         const missing = !files.some((file) => file.path === cached.path);
@@ -3429,9 +4294,7 @@ export class App implements OnInit, OnDestroy {
             active.diskVersion = document.diskVersion;
             active.status = 'saved';
             active.missingOnDisk = false;
-            this.runDiagnostics = this.runDiagnostics.filter(
-              (diagnostic) => diagnostic.path !== active.path,
-            );
+            this.runnerStore.clearDiagnosticsForPath(active.path);
             this.workspaceNotice = `RELOADED EXTERNAL CHANGE · ${active.path}`;
           }
         } catch (error) {
@@ -3516,6 +4379,7 @@ export class App implements OnInit, OnDestroy {
         this.workspaceNotice = this.desktopError(error, `RECOVERY UNAVAILABLE · ${filePath}`);
       }
     }
+    this.syncLanguageDocument(active, 'open');
     this.renderDesktopState();
   }
 
@@ -3528,6 +4392,23 @@ export class App implements OnInit, OnDestroy {
       this.workspaceNotice = 'TRUST WORKSPACE BEFORE WRITING SOURCE FILES.';
       this.renderDesktopState();
       return;
+    }
+    if (options.reason !== 'auto' && this.formatOnSaveEnabled && window.codeyo.language) {
+      try {
+        const formatResult = await window.codeyo.language.formatDocument(
+          this.workspace.id,
+          this.languageDocumentFor(file),
+        );
+        if (formatResult.available && formatResult.edit?.edits.length) {
+          const before = file.lines.join('\n');
+          const after = applyTextEdits(before, formatResult.edit.edits);
+          if (after !== before) {
+            file.lines = after.split('\n');
+          }
+        }
+      } catch {
+        // Format-on-save is best-effort; fall through to saving the current buffer.
+      }
     }
     const content = file.lines.join('\n');
     if (options.expectedContent !== undefined && options.expectedContent !== content) {
@@ -3581,7 +4462,7 @@ export class App implements OnInit, OnDestroy {
       await window.codeyo.files.create(this.workspace.id, filePath, content);
       this.creatingFile = false;
       this.newFileName = '';
-      this.fileQuery = '';
+      this.explorerStore.clearQuery(this.visibleIdeFiles);
       await this.loadDesktopFiles();
       this.selectIdeFile(filePath);
       this.workspaceNotice = `CREATED FILE · ${filePath}`;
@@ -3632,28 +4513,10 @@ export class App implements OnInit, OnDestroy {
       this.renderDesktopState();
       return;
     }
-    if (file.workspaceFile && file.status !== 'saved') {
-      this.desktopOutput = [
-        `$ RUN ${file.path}`,
-        'UNSAVED BUFFER · RUN ABORTED',
-        'SAVE OR SAVE ALL BEFORE RUNNING THE DISK FILE.',
-      ];
-      this.workspaceNotice = `UNSAVED BUFFER · SAVE BEFORE RUNNING · ${file.path}`;
-      this.activeConsolePanel = 'output';
-      this.renderDesktopState();
+    const profile = this.runProfileForFile(file);
+    if (!profile) {
       return;
     }
-    const profile: RunProfile = {
-      id: `${file.lang}-current`,
-      name: `Run ${file.name}`,
-      language: file.lang,
-      command: file.lang === 'cpp' ? this.cppExecutable : this.pythonExecutable,
-      entryFile: file.path,
-      sourceFiles: file.lang === 'cpp' ? this.selectedCppSources() : undefined,
-      args: this.profileArgs.trim() ? this.profileArgs.trim().split(/\s+/) : undefined,
-      programArgs: file.lang === 'cpp' && this.cppProgramArgs.trim()
-        ? this.cppProgramArgs.trim().split(/\s+/) : undefined,
-    };
     await this.runDesktopProfile(profile);
   }
 
@@ -3670,7 +4533,48 @@ export class App implements OnInit, OnDestroy {
 
   private selectedCppSources(): string[] {
     this.ensureCppSourceSelection();
-    return [...this.cppSelectedSources];
+    return this.cppSourceSelectionPreview(this.activeIdeFile.path);
+  }
+
+  private get activeRunProfilePreview(): RunProfile | null {
+    return this.runProfileForFile(this.activeIdeFile);
+  }
+
+  private runProfileForFile(file: IdeFile): RunProfile | null {
+    if (file.lang !== 'python' && file.lang !== 'cpp') {
+      return null;
+    }
+    const profile: RunProfile = {
+      id: `${file.lang}-current`,
+      name: `Run ${file.name}`,
+      language: file.lang,
+      command: file.lang === 'cpp' ? this.cppExecutable : this.pythonExecutable,
+      entryFile: file.path,
+      args: this.splitProfileArgs(this.profileArgs),
+    };
+    if (file.lang === 'cpp') {
+      profile.sourceFiles = this.cppSourceSelectionPreview(file.path);
+      profile.programArgs = this.splitProfileArgs(this.cppProgramArgs);
+    }
+    return profile;
+  }
+
+  private splitProfileArgs(value: string): string[] | undefined {
+    const trimmed = value.trim();
+    return trimmed ? trimmed.split(/\s+/) : undefined;
+  }
+
+  private cppSourceSelectionPreview(entryPath: string): string[] {
+    const available = new Set(this.cppSourceCandidates.map((file) => file.path));
+    const selected = this.cppSelectedSources.filter((path) => available.has(path));
+    return selected.includes(entryPath) ? [...selected] : [entryPath, ...selected];
+  }
+
+  private dirtyRunInputForProfile(profile: RunProfile): IdeFile | undefined {
+    const runInputs = new Set([profile.entryFile, ...(profile.sourceFiles ?? [])]);
+    return this.ideFiles.find(
+      (file) => runInputs.has(file.path) && file.workspaceFile && file.status !== 'saved',
+    );
   }
 
   private async runDesktopProfile(profile: RunProfile): Promise<void> {
@@ -3682,31 +4586,27 @@ export class App implements OnInit, OnDestroy {
     if (this.runBusy) {
       return;
     }
-    const runInputs = new Set([profile.entryFile, ...(profile.sourceFiles ?? [])]);
-    const dirtyInput = this.ideFiles.find(
-      (file) => runInputs.has(file.path) && file.workspaceFile && file.status !== 'saved',
-    );
+    this.terminalPaneOpen = true;
+    const dirtyInput = this.dirtyRunInputForProfile(profile);
     if (dirtyInput) {
+      this.runnerStore.setPendingRun(profile, dirtyInput.path);
       this.desktopOutput = [
         `$ RUN ${profile.name}`,
-        `UNSAVED INPUT · ${dirtyInput.path}`,
-        'SAVE OR SAVE ALL BEFORE RUNNING THE DISK FILE.',
+        `UNSAVED BUFFER · ${dirtyInput.path}`,
+        'Choose Save and Run to write pending inputs, or cancel this run.',
       ];
       this.workspaceNotice = `UNSAVED BUFFER · SAVE BEFORE RUNNING · ${dirtyInput.path}`;
       this.activeConsolePanel = 'output';
       this.renderDesktopState();
       return;
     }
+    this.runnerStore.clearPendingRun();
     this.runBusy = true;
     this.workspaceNotice = `RUNNING · ${profile.name}`;
     this.renderDesktopState();
     try {
       const result = await window.codeyo.runner.run(this.workspace.id, profile);
-      this.recentRunResults = [
-        result,
-        ...this.recentRunResults.filter((previous) => previous.id !== result.id),
-      ].slice(0, 12);
-      this.runDiagnostics = result.diagnostics;
+      this.runnerStore.rememberResult(result);
       this.desktopOutput = this.runTranscriptLines(result);
       this.runTaskTranscript = [...this.desktopOutput];
       this.runTaskSequence += 1;
@@ -3877,14 +4777,7 @@ export class App implements OnInit, OnDestroy {
   }
 
   private clearGitComparison(): void {
-    this.gitComparison = null;
-    this.gitComparisonLeftLines = [];
-    this.gitComparisonRightLines = [];
-    this.gitComparisonAdded = 0;
-    this.gitComparisonRemoved = 0;
-    this.gitHunks = [];
-    this.pendingDiscardHunkId = null;
-    this.gitHistoryDetail = null;
+    this.gitStore.clearComparison();
     this.reviewSnapshotDraft = '';
     this.selectedReviewRunResultId = '';
     this.selectedCommitRunResultId = '';
@@ -3990,22 +4883,22 @@ export class App implements OnInit, OnDestroy {
   private applyRunProfile(profile: RunProfile): void {
     if (profile.language === 'python') {
       if (profile.command) {
-        this.pythonExecutable = profile.command;
+        this.projectSettingsStore.update(this.workspace, 'pythonCommand', profile.command);
         this.writeWorkspaceStringSetting('python-command', profile.command);
       }
       if (this.activeIdeFile.lang === 'python') {
-        this.profileArgs = profile.args?.join(' ') ?? '';
+        this.projectSettingsStore.update(this.workspace, 'profileArgs', profile.args?.join(' ') ?? '');
       }
       return;
     }
     if (profile.command) {
-      this.cppExecutable = profile.command;
+      this.projectSettingsStore.update(this.workspace, 'cppCommand', profile.command);
       this.writeWorkspaceStringSetting('cpp-command', profile.command);
     }
     if (this.activeIdeFile.lang === 'cpp') {
-      this.profileArgs = profile.args?.join(' ') ?? '';
+      this.projectSettingsStore.update(this.workspace, 'profileArgs', profile.args?.join(' ') ?? '');
     }
-    this.cppProgramArgs = profile.programArgs?.join(' ') ?? '';
+    this.projectSettingsStore.update(this.workspace, 'cppProgramArgs', profile.programArgs?.join(' ') ?? '');
     if (profile.sourceFiles?.length) {
       this.cppSelectedSources = profile.sourceFiles.filter((path) =>
         this.cppSourceCandidates.some((file) => file.path === path));
@@ -4056,10 +4949,7 @@ export class App implements OnInit, OnDestroy {
     if (!result) {
       return null;
     }
-    this.recentRunResults = [
-      result,
-      ...this.recentRunResults.filter((previous) => previous.id !== result.id),
-    ].slice(0, 12);
+    this.runnerStore.rememberEvidence(result);
     return result;
   }
 
@@ -4148,24 +5038,18 @@ export class App implements OnInit, OnDestroy {
         this.workspaceNotice = `SNAPSHOT NOT FOUND · ${snapshotId}`;
         return;
       }
-      this.snapshotPreview = snapshot;
-      this.snapshotActivePath = snapshot.files[0]?.path ?? '';
-      this.snapshotRunResult = null;
+      let runEvidence: RunResult | null = null;
       if (snapshot.runResultId) {
         try {
-          this.snapshotRunResult = await window.codeyo.runner.getResult(this.workspace.id, snapshot.runResultId);
-          if (!this.snapshotRunResult) {
+          runEvidence = await window.codeyo.runner.getResult(this.workspace.id, snapshot.runResultId);
+          if (!runEvidence) {
             this.workspaceNotice = `RUN EVIDENCE NOT FOUND · ${snapshot.runResultId}`;
           }
         } catch (error) {
           this.workspaceNotice = this.desktopError(error, `RUN EVIDENCE UNAVAILABLE · ${snapshot.runResultId}`);
         }
       }
-      this.snapshotEvidenceOpen = false;
-      this.snapshotDiagnosticRevealLine = 0;
-      this.snapshotDiagnosticRevealColumn = 1;
-      this.snapshotDiagnosticRevealRequest = 0;
-      this.snapshotCompareOpen = false;
+      this.snapshotStore.open(snapshot, runEvidence);
       this.selectChannel('snapshots');
       await this.loadSnapshotCurrentContent();
     } catch (error) {
@@ -4177,16 +5061,15 @@ export class App implements OnInit, OnDestroy {
   }
 
   async selectSnapshotFile(filePath: string): Promise<void> {
-    if (!this.snapshotPreview?.files.some((file) => file.path === filePath)) {
+    if (!this.snapshotStore.selectFile(filePath)) {
       return;
     }
-    this.snapshotActivePath = filePath;
     await this.loadSnapshotCurrentContent();
     this.renderDesktopState();
   }
 
   toggleSnapshotEvidence(): void {
-    this.snapshotEvidenceOpen = !this.snapshotEvidenceOpen;
+    this.snapshotStore.toggleEvidence();
     this.renderDesktopState();
   }
 
@@ -4197,10 +5080,8 @@ export class App implements OnInit, OnDestroy {
       this.renderDesktopState();
       return;
     }
-    this.snapshotActivePath = file.path;
-    this.snapshotDiagnosticRevealLine = diagnostic.line;
-    this.snapshotDiagnosticRevealColumn = diagnostic.column ?? 1;
-    this.snapshotDiagnosticRevealRequest += 1;
+    this.snapshotStore.selectFile(file.path);
+    this.snapshotStore.revealDiagnostic(diagnostic);
     await this.loadSnapshotCurrentContent();
     this.renderDesktopState();
   }
@@ -4226,13 +5107,7 @@ export class App implements OnInit, OnDestroy {
   }
 
   closeSnapshot(): void {
-    this.snapshotPreview = null;
-    this.snapshotActivePath = '';
-    this.snapshotRunResult = null;
-    this.snapshotEvidenceOpen = false;
-    this.snapshotDiagnosticRevealLine = 0;
-    this.snapshotDiagnosticRevealRequest = 0;
-    this.snapshotCompareOpen = false;
+    this.snapshotStore.close();
   }
 
   toggleSnapshotCompare(): void {

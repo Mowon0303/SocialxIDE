@@ -12,6 +12,7 @@ import {
 import type { FitAddon as XtermFitAddon } from '@xterm/addon-fit';
 import type { Terminal as XtermTerminal } from '@xterm/xterm';
 import { TerminalSession, WorkspaceHandle } from './desktop-api';
+import { EmptyStateComponent } from './panels/empty-state.component';
 
 interface VisibleSession extends TerminalSession {
   buffer: string;
@@ -21,6 +22,7 @@ interface VisibleSession extends TerminalSession {
 @Component({
   selector: 'codeyo-terminal',
   standalone: true,
+  imports: [EmptyStateComponent],
   template: `
     <div class="terminal-session-bar">
       @for (session of sessions; track session.id) {
@@ -42,7 +44,13 @@ interface VisibleSession extends TerminalSession {
               <button type="submit">ok</button>
             </form>
           } @else {
-            <button class="terminal-tab-main" type="button" (click)="activate(session.id)" (dblclick)="startRename(session)">
+            <button
+              class="terminal-tab-main"
+              type="button"
+              [attr.data-testid]="session.id.startsWith('task-') ? 'terminal-task-tab' : 'terminal-shell-tab'"
+              (click)="activate(session.id)"
+              (dblclick)="startRename(session)"
+            >
               <span>{{ session.title }}</span>
               <small>{{ sessionStatusLabel(session) }}</small>
             </button>
@@ -53,13 +61,25 @@ interface VisibleSession extends TerminalSession {
       }
       <button class="terminal-new" type="button" [disabled]="!enabled || creatingSession" (click)="newSession()">+</button>
     </div>
+    <div class="terminal-status-strip" data-testid="terminal-status" [class.disabled]="!enabled">
+      <span>{{ terminalModeLabel }}</span>
+      <span>shell {{ terminalShellLabel }}</span>
+      <span>cwd {{ terminalCwdLabel }}</span>
+      <span>{{ terminalStateLabel }}</span>
+    </div>
     @if (terminalNotice) {
       <div class="terminal-notice">{{ terminalNotice }}</div>
     }
     @if (!enabled) {
-      <div class="terminal-disabled">TRUST WORKSPACE TO START A TERMINAL SESSION.</div>
+      <codeyo-empty-state
+        label="Terminal"
+        [title]="workspace ? 'Workspace not trusted' : 'No workspace'"
+        [message]="workspace ? 'Trust this folder before starting an interactive shell.' : 'Open a trusted workspace before starting a terminal session.'"
+        [details]="workspace?.rootPath || 'Terminal is disabled outside Electron workspace mode.'"
+        variant="warning"
+      />
     }
-    <div #host class="desktop-terminal-host" [class.is-disabled]="!enabled"></div>
+    <div #host class="desktop-terminal-host" data-testid="terminal-host" [class.is-disabled]="!enabled"></div>
   `,
   styleUrl: './desktop-terminal.component.css',
 })
@@ -88,6 +108,48 @@ export class DesktopTerminalComponent implements AfterViewInit, OnChanges, OnDes
   private readonly maxVisibleSessionBuffer = 200000;
 
   constructor(private readonly changeDetector: ChangeDetectorRef) {}
+
+  get activeSession(): VisibleSession | undefined {
+    return this.sessions.find((session) => session.id === this.activeSessionId);
+  }
+
+  get terminalModeLabel(): string {
+    if (!this.workspace) {
+      return 'NO WORKSPACE';
+    }
+    if (!this.enabled) {
+      return 'TERMINAL DISABLED';
+    }
+    return this.activeSession?.id.startsWith('task-') ? 'RUN OUTPUT' : 'REAL TERMINAL';
+  }
+
+  get terminalShellLabel(): string {
+    const shell = this.activeSession?.shell;
+    if (!shell) {
+      return this.enabled ? 'starting' : 'locked';
+    }
+    if (shell === 'task') {
+      return 'task';
+    }
+    const normalized = shell.replace(/\\/g, '/');
+    return normalized.split('/').pop() || shell;
+  }
+
+  get terminalCwdLabel(): string {
+    const cwd = this.activeSession?.cwd || this.workspace?.rootPath;
+    return cwd ? this.compactPath(cwd) : 'none';
+  }
+
+  get terminalStateLabel(): string {
+    const session = this.activeSession;
+    if (!session) {
+      return this.enabled ? 'NO SESSION' : 'UNTRUSTED';
+    }
+    if (session.status === 'exited') {
+      return session.exitCode === undefined ? 'EXITED' : `EXIT ${session.exitCode}`;
+    }
+    return session.id.startsWith('task-') ? 'CAPTURED' : 'RUNNING';
+  }
 
   ngAfterViewInit(): void {
     if (!this.host) {
@@ -425,6 +487,15 @@ export class DesktopTerminalComponent implements AfterViewInit, OnChanges, OnDes
 
   private sanitizeTerminalTitle(title: string): string {
     return (title.replace(/\s+/g, ' ').trim() || 'Shell').slice(0, 40);
+  }
+
+  private compactPath(value: string): string {
+    const normalized = value.replace(/\\/g, '/');
+    const parts = normalized.split('/').filter(Boolean);
+    if (parts.length <= 3) {
+      return value;
+    }
+    return `.../${parts.slice(-3).join('/')}`;
   }
 
   private formatError(error: unknown, fallback: string): string {

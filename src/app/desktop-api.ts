@@ -45,8 +45,129 @@ export interface EditorDiagnostic {
   path: string;
   line: number;
   column?: number;
+  endLine?: number;
+  endColumn?: number;
   severity: 'error' | 'warning';
+  source?: 'run' | 'lsp' | 'spell';
+  code?: string;
   message: string;
+  suggestions?: string[];
+}
+
+export interface SpellCheckRegion {
+  startLine: number;
+  startColumn: number;
+  endLine: number;
+  endColumn: number;
+  text: string;
+}
+
+export interface LanguageDocument {
+  path: string;
+  language: EditorLanguage;
+  content: string;
+  version: number;
+  spellRanges?: SpellCheckRegion[];
+}
+
+export interface LanguagePositionRequest extends LanguageDocument {
+  line: number;
+  column: number;
+}
+
+export interface LanguageCompletionItem {
+  label: string;
+  detail?: string;
+  info?: string;
+  kind?: string;
+  apply?: string;
+}
+
+export interface LanguageCompletionResult {
+  available: boolean;
+  reason?: string;
+  items: LanguageCompletionItem[];
+}
+
+export interface LanguageHoverResult {
+  available: boolean;
+  contents: string;
+  range?: {
+    startLine: number;
+    startColumn: number;
+    endLine: number;
+    endColumn: number;
+  };
+}
+
+export interface LanguageDefinitionLocation {
+  path: string;
+  line: number;
+  column: number;
+  endLine?: number;
+  endColumn?: number;
+}
+
+export interface LanguageDefinitionResult {
+  available: boolean;
+  locations: LanguageDefinitionLocation[];
+}
+
+export interface LanguageTextEdit {
+  path: string;
+  startLine: number;
+  startColumn: number;
+  endLine: number;
+  endColumn: number;
+  newText: string;
+}
+
+export interface LanguageWorkspaceEdit {
+  edits: LanguageTextEdit[];
+}
+
+export interface LanguageRenameResult {
+  available: boolean;
+  reason?: string;
+  edit?: LanguageWorkspaceEdit;
+}
+
+export interface LanguageCodeAction {
+  title: string;
+  kind?: string;
+  diagnostics?: EditorDiagnostic[];
+  edit?: LanguageWorkspaceEdit;
+}
+
+export interface LanguageCodeActionResult {
+  available: boolean;
+  reason?: string;
+  actions: LanguageCodeAction[];
+}
+
+export interface LanguageFormatResult {
+  available: boolean;
+  reason?: string;
+  edit?: LanguageWorkspaceEdit;
+}
+
+export interface LanguageServiceStatus {
+  language: 'python' | 'cpp' | 'spell';
+  state: 'idle' | 'starting' | 'ready' | 'missing-tool' | 'error' | 'stopped';
+  label: string;
+  message?: string;
+}
+
+export interface LanguageWorkspaceStatus {
+  workspaceId: string;
+  services: LanguageServiceStatus[];
+}
+
+export interface LanguageDiagnosticsEvent {
+  workspaceId: string;
+  path: string;
+  source: 'lsp' | 'spell';
+  diagnostics: EditorDiagnostic[];
 }
 
 export interface TerminalSession {
@@ -231,6 +352,20 @@ export interface CodeyoDesktopApi {
     saveProfile(workspaceId: string, profile: RunProfile): Promise<RunProfile>;
     history(workspaceId: string): Promise<RunResult[]>;
     getResult(workspaceId: string, runResultId: string): Promise<RunResult | null>;
+  };
+  language: {
+    status(workspaceId: string): Promise<LanguageWorkspaceStatus>;
+    openDocument(workspaceId: string, document: LanguageDocument): Promise<{ opened: true }>;
+    changeDocument(workspaceId: string, document: LanguageDocument): Promise<{ changed: true }>;
+    closeDocument(workspaceId: string, document: LanguageDocument): Promise<{ closed: true }>;
+    completion(workspaceId: string, request: LanguagePositionRequest): Promise<LanguageCompletionResult>;
+    hover(workspaceId: string, request: LanguagePositionRequest): Promise<LanguageHoverResult>;
+    definition(workspaceId: string, request: LanguagePositionRequest): Promise<LanguageDefinitionResult>;
+    renameSymbol(workspaceId: string, request: LanguagePositionRequest, newName: string): Promise<LanguageRenameResult>;
+    codeActions(workspaceId: string, request: LanguagePositionRequest): Promise<LanguageCodeActionResult>;
+    formatDocument(workspaceId: string, document: LanguageDocument): Promise<LanguageFormatResult>;
+    onDiagnostics(handler: (event: LanguageDiagnosticsEvent) => void): () => void;
+    onStatus(handler: (event: LanguageServiceStatus & { workspaceId: string }) => void): () => void;
   };
   git: {
     status(workspaceId: string): Promise<GitStatus>;

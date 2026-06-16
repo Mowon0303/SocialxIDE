@@ -13,6 +13,8 @@
     "desktop:test:release-evidence": "node electron/test-release-evidence.cjs",
     "desktop:smoke:local": "node electron/smoke-local-project.cjs",
     "desktop:smoke:app": "node electron/smoke-packaged-app.cjs",
+    "desktop:e2e": "npm run build && playwright test --config playwright.config.ts",
+    "desktop:e2e:headed": "npm run build && playwright test --config playwright.config.ts --headed",
     "desktop:verify:v0.1": "node electron/verify-v0.1.cjs",
     "postdesktop:build": "node electron/prepare-desktop-build.cjs",
     "desktop:icons": "node electron/generate-icons.cjs",
@@ -64,16 +66,22 @@
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "codemirror": "^6.0.2",
+    "cspell-lib": "^10.0.1",
     "lucide": "^1.16.0",
     "node-pty": "^1.1.0",
+    "pyright": "^1.1.410",
     "rxjs": "~7.8.0",
-    "tslib": "^2.3.0"
+    "tslib": "^2.3.0",
+    "vscode-jsonrpc": "^9.0.0",
+    "vscode-languageserver-protocol": "^3.18.0",
+    "vscode-uri": "^3.1.0"
   },
   "devDependencies": {
     "@angular/build": "^21.2.12",
     "@angular/cli": "^21.2.12",
     "@angular/compiler-cli": "^21.2.0",
     "@electron/rebuild": "^4.0.4",
+    "@playwright/test": "^1.61.0",
     "electron": "^42.2.0",
     "electron-builder": "^26.8.1",
     "jsdom": "^28.0.0",
@@ -98,7 +106,8 @@
       "node_modules/**/*"
     ],
     "asarUnpack": [
-      "node_modules/node-pty/**/*"
+      "node_modules/node-pty/**/*",
+      "node_modules/pyright/**/*"
     ],
     "mac": {
       "category": "public.app-category.developer-tools",

@@ -7,6 +7,7 @@ const crypto = require('node:crypto');
 const { execFile, spawn } = require('node:child_process');
 const pty = require('node-pty');
 const { CodeyoStore } = require('./storage.cjs');
+const { LanguageServiceManager } = require('./language-service.cjs');
 const { cppCompileSourceFiles } = require('./cpp-run-policy.cjs');
 const { normalizeGitAction } = require('./git-action-policy.cjs');
 const {
@@ -92,6 +93,7 @@ const {
   appendRunOutputTruncatedNotice,
   runOutputTruncatedMessage,
   runToolOutputBufferBytes,
+  stripRunOutputAnsi,
 } = require('./runner-output-policy.cjs');
 const {
   cleanupRunnerTempBuild,
@@ -105,12 +107,16 @@ const {
 
 let mainWindow;
 let store;
+let languageServices;
 let workspaceWatcher;
 const terminals = new Map();
 const watchedChangeTimers = new Map();
 const runOutputByteLimit = 512 * 1024;
 const runInputEvidenceByteLimit = 2 * 1024 * 1024;
 const startupSmoke = process.env.CODEYO_STARTUP_SMOKE === '1';
+const e2eWorkspaceOpenEnabled = process.env.CODEYO_E2E === '1'
+  && !app.isPackaged
+  && Boolean(process.env.CODEYO_E2E_WORKSPACE);
 const workspaceRootRecheckedChannels = new Set([
   'files:list',
   'files:read',
@@ -126,6 +132,16 @@ const workspaceRootRecheckedChannels = new Set([
   'terminal:create',
   'runner:run',
   'runner:save-profile',
+  'language:status',
+  'language:open-document',
+  'language:change-document',
+  'language:close-document',
+  'language:completion',
+  'language:hover',
+  'language:definition',
+  'language:rename-symbol',
+  'language:code-actions',
+  'language:format-document',
   'git:status',
   'git:branches',
   'git:staged-summary',
@@ -271,6 +287,10 @@ function installApplicationMenu() {
 
 app.whenReady().then(async () => {
   store = new CodeyoStore(app.getPath('userData'));
+  languageServices = new LanguageServiceManager({
+    emitDiagnostics: (payload) => mainWindow?.webContents.send('language:diagnostics', payload),
+    emitStatus: (payload) => mainWindow?.webContents.send('language:status-changed', payload),
+  });
   registerHandlers();
   installApplicationMenu();
   const window = createWindow();
@@ -315,19 +335,24 @@ async function waitForRendererSmoke(window) {
       (() => {
         const root = document.querySelector('app-root');
         const shell = document.querySelector('.studio-shell');
-        const text = document.body?.innerText || '';
+        const brand = document.querySelector('.studio-brand');
+        const canvas = document.querySelector('.design-canvas');
+        const rootText = root?.textContent || '';
+        const text = [document.body?.innerText || '', rootText].join(' ');
         return {
           hasRoot: Boolean(root),
           hasShell: Boolean(shell),
-          hasWorkspace: text.includes('Codeyo Workspace'),
-          rootText: (root?.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
+          hasBrand: Boolean(brand) && (brand.textContent || '').includes('Codeyo'),
+          hasCanvas: Boolean(canvas),
+          hasHomeAction: text.includes('No folder open') && text.includes('Open Folder'),
+          rootText: rootText.replace(/\\s+/g, ' ').trim().slice(0, 160),
           scriptCount: document.scripts.length,
           title: document.title,
           url: location.href
         };
       })()
     `);
-    if (lastResult.hasShell && lastResult.hasWorkspace) {
+    if (lastResult.hasShell && lastResult.hasBrand && lastResult.hasCanvas && lastResult.hasHomeAction) {
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
@@ -459,6 +484,7 @@ app.on(desktopResourceCleanupEvent, cleanupDesktopResources);
 
 function cleanupDesktopResources() {
   clearWorkspaceWatcher();
+  void languageServices?.shutdownAll();
   for (const session of terminals.values()) {
     try {
       session.process.kill();
@@ -512,6 +538,11 @@ function handleSync(channel, handler) {
 
 function registerHandlers() {
   handle('workspace:open', async () => {
+    if (e2eWorkspaceOpenEnabled) {
+      return openWorkspaceRoot(process.env.CODEYO_E2E_WORKSPACE, {
+        trusted: process.env.CODEYO_E2E_TRUST === '1',
+      });
+    }
     const result = await dialog.showOpenDialog(mainWindow, {
       title: 'Open a Codeyo workspace',
       properties: ['openDirectory'],
@@ -519,10 +550,7 @@ function registerHandlers() {
     if (result.canceled || result.filePaths.length === 0) {
       return null;
     }
-    const rootPath = await resolveUsableWorkspaceRoot(result.filePaths[0]);
-    const workspace = store.openWorkspace(rootPath);
-    updateWorkspaceWatcher(workspace);
-    return workspace;
+    return openWorkspaceRoot(result.filePaths[0]);
   });
   handle('workspace:recent', () => store.listRecentWorkspaces());
   handle('workspace:resume', async ({ workspaceId }) => {
@@ -758,6 +786,51 @@ function registerHandlers() {
   handle('runner:get-result', ({ workspaceId, runResultId }) => {
     requireWorkspace(workspaceId);
     return store.getRunResult(workspaceId, runResultId) || null;
+  });
+
+  handle('language:status', ({ workspaceId }) => {
+    const workspace = requireTrustedWorkspace(workspaceId);
+    return languageServices.status(workspace);
+  });
+  handle('language:open-document', async ({ workspaceId, document }) => {
+    const workspace = requireTrustedWorkspace(workspaceId);
+    return languageServices.openDocument(workspace, sanitizeLanguageDocumentPayload(document));
+  });
+  handle('language:change-document', async ({ workspaceId, document }) => {
+    const workspace = requireTrustedWorkspace(workspaceId);
+    return languageServices.changeDocument(workspace, sanitizeLanguageDocumentPayload(document));
+  });
+  handle('language:close-document', async ({ workspaceId, document }) => {
+    const workspace = requireTrustedWorkspace(workspaceId);
+    return languageServices.closeDocument(workspace, sanitizeLanguageDocumentPayload(document));
+  });
+  handle('language:completion', async ({ workspaceId, request }) => {
+    const workspace = requireTrustedWorkspace(workspaceId);
+    return languageServices.completion(workspace, sanitizeLanguageRequestPayload(request));
+  });
+  handle('language:hover', async ({ workspaceId, request }) => {
+    const workspace = requireTrustedWorkspace(workspaceId);
+    return languageServices.hover(workspace, sanitizeLanguageRequestPayload(request));
+  });
+  handle('language:definition', async ({ workspaceId, request }) => {
+    const workspace = requireTrustedWorkspace(workspaceId);
+    return languageServices.definition(workspace, sanitizeLanguageRequestPayload(request));
+  });
+  handle('language:rename-symbol', async ({ workspaceId, request, newName }) => {
+    const workspace = requireTrustedWorkspace(workspaceId);
+    return languageServices.renameSymbol(
+      workspace,
+      sanitizeLanguageRequestPayload(request),
+      sanitizeLanguageSymbolName(newName),
+    );
+  });
+  handle('language:code-actions', async ({ workspaceId, request }) => {
+    const workspace = requireTrustedWorkspace(workspaceId);
+    return languageServices.codeActions(workspace, sanitizeLanguageRequestPayload(request));
+  });
+  handle('language:format-document', async ({ workspaceId, document }) => {
+    const workspace = requireTrustedWorkspace(workspaceId);
+    return languageServices.formatDocument(workspace, sanitizeLanguageDocumentPayload(document));
   });
 
   handle('git:status', async ({ workspaceId }) => {
@@ -1019,6 +1092,50 @@ function requireUsableWorkspaceForChannelSync(workspaceId, { trusted }) {
   }
 }
 
+function sanitizeLanguageDocumentPayload(document = {}) {
+  return {
+    path: portableEditableRelativePath(document.path),
+    language: languageFor(document.path || ''),
+    content: assertWorkspaceTextContentSize(document.content || ''),
+    version: positiveInteger(document.version, 1),
+    spellRanges: sanitizeSpellRangePayload(document.spellRanges),
+  };
+}
+
+function sanitizeLanguageRequestPayload(request = {}) {
+  const document = sanitizeLanguageDocumentPayload(request);
+  return {
+    ...document,
+    line: positiveInteger(request.line, 1),
+    column: positiveInteger(request.column, 1),
+  };
+}
+
+function sanitizeSpellRangePayload(ranges) {
+  if (!Array.isArray(ranges)) {
+    return [];
+  }
+  return ranges.slice(0, 120).map((range) => ({
+    startLine: positiveInteger(range?.startLine, 1),
+    startColumn: positiveInteger(range?.startColumn, 1),
+    endLine: positiveInteger(range?.endLine, 1),
+    endColumn: positiveInteger(range?.endColumn, 1),
+    text: assertWorkspaceTextContentSize(range?.text || ''),
+  }));
+}
+
+function sanitizeLanguageSymbolName(value) {
+  const name = sanitizeTextField(value, 120).trim();
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+    throw new Error('Rename symbol requires a valid identifier');
+  }
+  return name;
+}
+
+function positiveInteger(value, fallback) {
+  return Number.isFinite(Number(value)) ? Math.max(1, Math.floor(Number(value))) : fallback;
+}
+
 async function resolveUsableWorkspaceRoot(rootPath) {
   try {
     return await assertWorkspaceRootDirectory(fs, path.resolve(rootPath));
@@ -1028,6 +1145,14 @@ async function resolveUsableWorkspaceRoot(rootPath) {
     }
     throw error;
   }
+}
+
+async function openWorkspaceRoot(rootPath, { trusted = false } = {}) {
+  const usableRootPath = await resolveUsableWorkspaceRoot(rootPath);
+  const openedWorkspace = store.openWorkspace(usableRootPath);
+  const workspace = trusted ? store.trustWorkspace(openedWorkspace.id) : openedWorkspace;
+  updateWorkspaceWatcher(workspace);
+  return workspace;
 }
 
 function watchWorkspace(workspace) {
@@ -1600,9 +1725,10 @@ function toolLaunchFailureMessage(command, language, error) {
 
 function parseDiagnostics(output, rootPath) {
   const diagnostics = [];
+  const cleaned = stripRunOutputAnsi(output);
   const python = /File "([^"]+)", line (\d+)(?:[\s\S]*?\n(?:.*\n)?([A-Za-z]+Error: .*))?/g;
   const cpp = /^(.+?):(\d+):(\d+):\s+(warning|error):\s+(.+)$/gm;
-  for (const match of output.matchAll(python)) {
+  for (const match of cleaned.matchAll(python)) {
     const filePath = diagnosticPath(match[1], rootPath);
     if (!filePath) {
       continue;
@@ -1614,7 +1740,7 @@ function parseDiagnostics(output, rootPath) {
       message: match[3] || 'Python execution error',
     });
   }
-  for (const match of output.matchAll(cpp)) {
+  for (const match of cleaned.matchAll(cpp)) {
     const filePath = diagnosticPath(match[1], rootPath);
     if (!filePath) {
       continue;

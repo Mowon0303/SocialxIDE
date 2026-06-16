@@ -4,9 +4,11 @@
   [class.density-compact]="editorDensity === 'compact'"
   [class.density-comfortable]="editorDensity === 'comfortable'"
   [class.is-resizing-rail]="resizingRail !== null"
+  [ngStyle]="editorThemeVariables"
   [style.--codeyo-editor-font-size]="editorFontSizePx + 'px'"
   [style.--codeyo-editor-line-height]="editorLineHeightPx + 'px'"
   [style.--codeyo-editor-y-padding]="editorVerticalPaddingPx + 'px'"
+  [style.--codeyo-editor-font-family]="editorFontFamily"
 >
   <header class="studio-nav">
     <div class="studio-brand">
@@ -23,7 +25,7 @@
       @if (activeChannelView === 'ide') {
         @if (homeMode) {
           <span class="studio-save-state">No folder open</span>
-          <button class="studio-tool-button run" type="button" (click)="openDesktopWorkspace()">Open Folder</button>
+          <button class="studio-tool-button run" type="button" data-testid="app-open-folder" (click)="openDesktopWorkspace()">Open Folder</button>
         } @else {
           <span class="studio-save-state">{{ editedFileCount }} unsaved</span>
           <button
@@ -34,11 +36,11 @@
           >
             {{ assistantPanelOpen ? 'Hide Assist' : 'Show Assist' }}
           </button>
-          <button class="studio-tool-button" type="button" (click)="saveCurrentFile()">Save ⌘S</button>
+          <button class="studio-tool-button" type="button" data-testid="app-save-current" (click)="saveCurrentFile()">Save ⌘S</button>
           @if (canSaveAll) {
             <button class="studio-tool-button" type="button" (click)="saveAllFiles()">Save All</button>
           }
-          <button class="studio-tool-button run" type="button" [disabled]="runBusy" (click)="runCode()">
+          <button class="studio-tool-button run" type="button" data-testid="app-run-current" [disabled]="runBusy" (click)="runCode()">
             {{ runBusy ? 'Running...' : 'Run ▶' }}
           </button>
         }
@@ -59,18 +61,6 @@
         [class.resizing-explorer]="resizingRail === 'explorer'"
       >
         <aside class="left-rail">
-          <div class="server-card">
-            <span class="mono tiny">Workspace 01 / local</span>
-            <h2>Codeyo Workspace</h2>
-            <div class="avatar-stack">
-              <span class="avatar blue">WS</span>
-              <span class="avatar green">RN</span>
-              <span class="avatar coral">GT</span>
-              <span class="avatar minty">RV</span>
-              <span class="avatar muted">v1</span>
-            </div>
-          </div>
-
           <div class="section-label"><span>§01</span><b>Workspace</b><i></i></div>
           <div class="workspace-tree">
             @for (channel of channels; track channel.id) {
@@ -78,6 +68,7 @@
                 <button
                   class="workspace-node"
                   type="button"
+                  [attr.data-testid]="'channel-' + channel.id"
                   [class.active]="activeChannelId === channel.id"
                   [class.open]="activeChannelId !== channel.id"
                   (click)="selectChannel(channel.id)"
@@ -96,6 +87,7 @@
                 <button
                   class="channel"
                   type="button"
+                  [attr.data-testid]="'channel-' + channel.id"
                   [class.active]="activeChannelId === channel.id"
                   [class.unread]="channel.unread"
                   [class.mention]="channel.mention"
@@ -155,21 +147,6 @@
             </section>
           }
 
-          <div class="section-label"><span>§03</span><b>Review Desk</b><i></i></div>
-          <article class="live-card">
-            <div><em></em><span class="mono">Local · Run Evidence</span></div>
-            <h3>Snapshots and journal</h3>
-            <p>Use run output, Git context, and notes as the review source of truth.</p>
-          </article>
-
-          <div class="pair-card"><span>Future assist slot · reserved</span><i></i></div>
-
-          <div class="section-label"><span>§04</span><b>Tools</b><i></i></div>
-          <div class="tool-list">
-            <span>Open Folder <b>⌘O</b></span>
-            <span>Run ↔ Git <mark>v0.1</mark></span>
-          </div>
-          <div class="volume-note">Local-first · single user</div>
         </aside>
         <button
           class="rail-resizer workspace-resizer"
@@ -227,7 +204,14 @@
                       @if (entry.metadata?.['runResultId']) {
                         <b class="journal-evidence">Run evidence attached</b>
                       }
-                      <button class="btn ghost" type="button" (click)="openSnapshot(entry.snapshotId)">Open Snapshot</button>
+                      <button
+                        class="btn ghost"
+                        type="button"
+                        [attr.data-testid]="'journal-open-snapshot-' + entry.snapshotId"
+                        (click)="openSnapshot(entry.snapshotId)"
+                      >
+                        Open Snapshot
+                      </button>
                     }
                     @if (journalRunResultId(entry)) {
                       <button class="btn ghost" type="button" (click)="openJournalRunEvidence(entry)">Open Run</button>
@@ -349,11 +333,11 @@
             }
           </section>
           @if (snapshotPreview) {
-            <article class="snapshot-preview" aria-label="Review snapshot preview">
+            <article class="snapshot-preview" aria-label="Review snapshot preview" data-testid="snapshot-preview">
               <header>
                 <div>
                   <span class="mono tiny">Review snapshot</span>
-                  <h3>{{ activeSnapshotFile.path }}</h3>
+                  <h3 data-testid="snapshot-active-path">{{ activeSnapshotFile.path }}</h3>
                   @if (snapshotPreview.sourceRevision) {
                     <small>SOURCE · COMMIT {{ snapshotPreview.sourceRevision.slice(0, 7) }}</small>
                   }
@@ -424,6 +408,7 @@
                     [ariaLabel]="'Snapshot ' + activeSnapshotFile.path"
                     [content]="activeSnapshotFile.content"
                     [language]="snapshotLanguage"
+                    [layoutKey]="editorLayoutKey"
                     [readOnly]="true"
                     [diagnostics]="activeSnapshotDiagnostics"
                     [diffLines]="snapshotCompareOpen ? snapshotComparison.leftLines : []"
@@ -440,6 +425,7 @@
                       [ariaLabel]="'Current ' + activeSnapshotFile.path"
                       [content]="snapshotCurrentContent"
                       [language]="snapshotLanguage"
+                      [layoutKey]="editorLayoutKey"
                       [readOnly]="true"
                       [diffLines]="snapshotComparison.rightLines"
                       diffKind="added"
@@ -522,6 +508,28 @@
                   </nav>
                 </section>
               }
+              @if (goToLineOpen) {
+                <div class="quick-open-backdrop" (click)="closeGoToLine()"></div>
+                <section class="go-to-line-popover" aria-label="Go to line" (click)="$event.stopPropagation()">
+                  <header>
+                    <span class="mono tiny">Go to Line</span>
+                    <button type="button" (click)="closeGoToLine()">×</button>
+                  </header>
+                  <form (submit)="submitGoToLine(); $event.preventDefault()">
+                    <input
+                      type="number"
+                      aria-label="Line number"
+                      min="1"
+                      [max]="activeIdeFile.lines.length"
+                      [value]="goToLineDraft"
+                      (input)="updateGoToLineDraft($event)"
+                      (keydown.escape)="closeGoToLine(); $event.preventDefault(); $event.stopPropagation()"
+                    />
+                    <button type="submit">Go</button>
+                  </form>
+                  <small>1-{{ activeIdeFile.lines.length }} · current {{ editorCursorLine }}:{{ editorCursorColumn }}</small>
+                </section>
+              }
               <div class="ide-plane-grid">
                 <main class="ide-editor">
                   <div class="ide-tabs">
@@ -536,12 +544,12 @@
                     }
                   </div>
                   @if (gitComparison) {
-                    <article class="git-compare-workbench" aria-label="Git comparison">
+                    <article class="git-compare-workbench" aria-label="Git comparison" data-testid="git-compare-workbench">
                       <header>
                         <div>
                           <span class="mono tiny">§10 · {{ isGitHistoryComparison ? 'Commit History' : 'Git Compare' }}</span>
                           <h3>{{ gitComparison.originalPath ? gitComparison.originalPath + ' → ' : '' }}{{ gitComparison.path }}</h3>
-                          <small>{{ gitComparisonSummary }}</small>
+                          <small data-testid="git-compare-summary">{{ gitComparisonSummary }}</small>
                         </div>
                         <button type="button" (click)="closeGitComparison()">Close ×</button>
                       </header>
@@ -589,6 +597,7 @@
                             [ariaLabel]="gitComparison.leftLabel + ' ' + gitComparison.path"
                             [content]="gitComparison.leftContent"
                             [language]="gitComparison.language"
+                            [layoutKey]="editorLayoutKey"
                             [readOnly]="true"
                             [diffLines]="gitComparisonLeftLines"
                             diffKind="removed"
@@ -600,6 +609,7 @@
                             [ariaLabel]="gitComparison.rightLabel + ' ' + gitComparison.path"
                             [content]="gitComparison.rightContent"
                             [language]="gitComparison.language"
+                            [layoutKey]="editorLayoutKey"
                             [readOnly]="true"
                             [diffLines]="gitComparisonRightLines"
                             diffKind="added"
@@ -681,20 +691,42 @@
                           {{ isGitHistoryComparison ? 'Open Current Buffer' : 'Open Buffer' }}
                         </button>
                         @if (isGitHistoryComparison && gitComparison.rightExists && reviewableCommitFileCount > 1) {
-                          <button class="btn ghost" type="button" [disabled]="gitSnapshotBusy" (click)="captureGitHistorySnapshot()">Save This File</button>
+                          <button
+                            class="btn ghost"
+                            type="button"
+                            data-testid="git-save-review-snapshot-file"
+                            [disabled]="gitSnapshotBusy"
+                            (click)="captureGitHistorySnapshot()"
+                          >
+                            Save This File
+                          </button>
                         }
                         @if (isGitHistoryComparison && reviewableCommitFileCount > 1) {
-                          <button class="btn accent" type="button" [disabled]="gitSnapshotBusy" (click)="captureGitHistorySnapshot('commit')">
+                          <button
+                            class="btn accent"
+                            type="button"
+                            data-testid="git-save-review-snapshot-commit"
+                            [disabled]="gitSnapshotBusy"
+                            (click)="captureGitHistorySnapshot('commit')"
+                          >
                             {{ gitSnapshotBusy ? 'Saving...' : 'Save Commit Set · ' + reviewableCommitFileCount }}
                           </button>
                         } @else if (isGitHistoryComparison && gitComparison.rightExists) {
-                          <button class="btn accent" type="button" [disabled]="gitSnapshotBusy" (click)="captureGitHistorySnapshot()">Save Review Snapshot</button>
+                          <button
+                            class="btn accent"
+                            type="button"
+                            data-testid="git-save-review-snapshot-file"
+                            [disabled]="gitSnapshotBusy"
+                            (click)="captureGitHistorySnapshot()"
+                          >
+                            Save Review Snapshot
+                          </button>
                         }
                         @if (!isGitHistoryComparison && canViewStagedComparison) {
-                          <button class="btn ghost" type="button" [disabled]="gitBusy" (click)="gitAction({ type: 'unstage', path: gitComparison.path, originalPath: gitComparison.originalPath })">Unstage</button>
+                          <button class="btn ghost" type="button" data-testid="git-compare-unstage" [disabled]="gitBusy" (click)="gitAction({ type: 'unstage', path: gitComparison.path, originalPath: gitComparison.originalPath })">Unstage</button>
                         }
                         @if (!isGitHistoryComparison && canViewUnstagedComparison) {
-                          <button class="btn accent" type="button" [disabled]="gitBusy" (click)="gitAction({ type: 'stage', path: gitComparison.path, originalPath: gitComparison.originalPath })">Stage Changes</button>
+                          <button class="btn accent" type="button" data-testid="git-compare-stage" [disabled]="gitBusy" (click)="gitAction({ type: 'stage', path: gitComparison.path, originalPath: gitComparison.originalPath })">Stage Changes</button>
                         }
                       </footer>
                     </article>
@@ -730,6 +762,7 @@
                               [ariaLabel]="'Disk version ' + activeIdeFile.name"
                               [content]="fileConflict.diskContent"
                               [language]="activeIdeFile.lang"
+                              [layoutKey]="editorLayoutKey"
                               [readOnly]="true"
                               [diffLines]="conflictComparison.leftLines"
                               diffKind="removed"
@@ -741,6 +774,7 @@
                               [ariaLabel]="'Unsaved buffer ' + activeIdeFile.name"
                               [content]="activeEditorText"
                               [language]="activeIdeFile.lang"
+                              [layoutKey]="editorLayoutKey"
                               [readOnly]="true"
                               [diffLines]="conflictComparison.rightLines"
                               diffKind="added"
@@ -755,20 +789,48 @@
                     } @else {
                     <div class="editor-sheet">
                       <div class="editor-ruler">
-                        <span>{{ activeIdeFile.lang }}</span>
-                        <b>{{ activeIdeFile.lines.length }} Lines</b>
+                        <span>{{ activeIdeFile.path }}</span>
+                        <b>{{ editorStatusSummary }}</b>
+                        <nav aria-label="Editor tools">
+                          <button type="button" (click)="openEditorSearch()">Search</button>
+                          <button type="button" (click)="openGoToLine()">Go Line</button>
+                          <button type="button" (click)="goToDefinitionAtCursor()">Go Def</button>
+                          <button type="button" (click)="formatActiveDocument()">Format</button>
+                          <button type="button" [class.active]="shortcutPanelOpen" (click)="toggleShortcutPanel()">Keys</button>
+                        </nav>
                       </div>
+                      @if (shortcutPanelOpen) {
+                        <aside class="shortcut-panel" aria-label="Keyboard shortcuts">
+                          <span><b>⌘/Ctrl P</b> Quick Open</span>
+                          <span><b>⌘/Ctrl F</b> Search</span>
+                          <span><b>Ctrl Space</b> Complete</span>
+                          <span><b>F12</b> Definition</span>
+                          <span><b>⌘/Ctrl S</b> Save</span>
+                          <span><b>⌘/Ctrl Shift S</b> Save All</span>
+                          <span><b>⌘/Ctrl G</b> Go to Line</span>
+                          <span><b>Run</b> Execute active file</span>
+                        </aside>
+                      }
                       <div class="editor-body">
                         <codeyo-editor
                           [ariaLabel]="'Edit ' + activeIdeFile.name"
                           [content]="activeEditorText"
                           [language]="activeIdeFile.lang"
+                          [layoutKey]="editorLayoutKey"
                           [readOnly]="homeMode || (isDesktop && !!workspace && !workspace.trusted)"
                           [diagnostics]="activeDiagnostics"
                           [revealLine]="diagnosticRevealLine"
                           [revealColumn]="diagnosticRevealColumn"
                           [revealRequest]="diagnosticRevealRequest"
+                          [searchRequest]="editorSearchRequest"
+                          [definitionRequest]="editorDefinitionRequest"
+                          [completionEnabled]="autocompleteEnabled && isTrustedWorkspaceFile(activeIdeFile)"
+                          [hoverEnabled]="lspDiagnosticsEnabled && isTrustedWorkspaceFile(activeIdeFile)"
+                          [completionProvider]="languageCompletionProvider"
+                          [hoverProvider]="languageHoverProvider"
                           (contentChange)="updateActiveFile($event)"
+                          (cursorChange)="updateEditorCursor($event)"
+                          (definitionLookup)="openDefinition($event)"
                         />
                       </div>
                     </div>
@@ -815,6 +877,7 @@
                   <div class="console-tabs">
                     <button
                       type="button"
+                      data-testid="console-tab-terminal"
                       [class.active]="activeConsolePanel === 'terminal'"
                       (click)="setConsolePanel('terminal')"
                     >
@@ -822,6 +885,7 @@
                     </button>
                     <button
                       type="button"
+                      data-testid="console-tab-problems"
                       [class.active]="activeConsolePanel === 'problems'"
                       (click)="setConsolePanel('problems')"
                     >
@@ -829,6 +893,7 @@
                     </button>
                     <button
                       type="button"
+                      data-testid="console-tab-output"
                       [class.active]="activeConsolePanel === 'output'"
                       (click)="setConsolePanel('output')"
                     >
@@ -844,6 +909,15 @@
                   </div>
                 </header>
                 @if (isDesktop) {
+                  <section class="run-status-strip" data-testid="run-status-strip" aria-label="Run status">
+                    <span data-testid="run-status-profile"><b>Profile</b>{{ runStatusProfileLabel }}</span>
+                    <span data-testid="run-status-entry"><b>Entry</b>{{ runStatusEntryLabel }}</span>
+                    <span data-testid="run-status-toolchain"><b>Toolchain</b>{{ runStatusToolchainLabel }}</span>
+                    <span data-testid="run-status-inputs"><b>Inputs</b>{{ runStatusArgsLabel }} · {{ runStatusDirtyLabel }}</span>
+                    <span data-testid="run-status-evidence"><b>Evidence</b>{{ runStatusEvidenceLabel }}</span>
+                  </section>
+                }
+                @if (isDesktop) {
                   <codeyo-terminal
                     [class.is-hidden-console]="activeConsolePanel !== 'terminal'"
                     [workspace]="workspace"
@@ -856,21 +930,53 @@
                   @if (activeConsolePanel !== 'terminal') {
                     <div class="console-surface">
                       @if (activeConsolePanel === 'problems') {
-                        @if (runDiagnostics.length > 0) {
-                          @for (diagnostic of runDiagnostics; track diagnostic.path + diagnostic.line + diagnostic.message) {
-                            <button class="problem-item" type="button" (click)="openDiagnostic(diagnostic)">
-                              <b>{{ diagnostic.severity }}</b>
+                        @if (allDiagnostics.length > 0) {
+                          <div class="problems-toolbar">
+                            <span>{{ problemSummary }}</span>
+                            <button type="button" [class.active]="problemFilter === 'all' && problemSourceFilter === 'all'" (click)="showAllProblems()">All</button>
+                            <button type="button" [class.active]="problemFilter === 'active'" (click)="setProblemFilter('active')">
+                              Active · {{ activeProblemCount }}
+                            </button>
+                            <button type="button" [class.active]="problemSourceFilter === 'run'" (click)="setProblemSourceFilter('run')">Run</button>
+                            <button type="button" [class.active]="problemSourceFilter === 'lsp'" (click)="setProblemSourceFilter('lsp')">LSP</button>
+                            <button type="button" [class.active]="problemSourceFilter === 'spell'" (click)="setProblemSourceFilter('spell')">Spell</button>
+                          </div>
+                          @for (diagnostic of filteredRunDiagnostics; track diagnostic.path + diagnostic.line + diagnostic.message) {
+                            <button
+                              class="problem-item"
+                              type="button"
+                              [attr.data-testid]="'problem-item-' + diagnostic.path + '-' + diagnostic.line"
+                              (click)="openDiagnostic(diagnostic)"
+                            >
+                              <b>{{ diagnostic.source || 'run' }} {{ diagnostic.severity }}</b>
                               <span>{{ diagnostic.path }}:{{ diagnostic.line }}{{ diagnostic.column ? ':' + diagnostic.column : '' }}</span>
                               <em>{{ diagnostic.message }}</em>
                               <i>Open</i>
                             </button>
+                          } @empty {
+                            <codeyo-empty-state
+                              label="Problems"
+                              title="No active-file problems"
+                              message="The current filter has no Run, LSP, or Spell diagnostics."
+                              details="Switch to All or run the active file to refresh evidence."
+                            />
                           }
                         } @else {
-                          @for (line of problemLines; track line) {
-                            <p class="problem-line">{{ line }}</p>
-                          }
+                          <codeyo-empty-state
+                            label="Problems"
+                            title="No problems"
+                            message="Run output, LSP diagnostics, and spell warnings will appear here when available."
+                            details="Use Run, edit a trusted workspace file, or enable language features in Settings."
+                          />
                         }
                       } @else {
+                        @if (pendingRunProfile) {
+                          <div class="run-decision">
+                            <span>Unsaved input · {{ pendingRunDirtyPath }}</span>
+                            <button class="btn accent" type="button" [disabled]="runBusy" (click)="saveAndRunPending()">Save and Run</button>
+                            <button class="btn ghost" type="button" [disabled]="runBusy" (click)="cancelPendingRun()">Cancel</button>
+                          </div>
+                        }
                         @for (line of outputLines; track line) {
                           <p>{{ line }}</p>
                         }
@@ -930,6 +1036,7 @@
             </button>
             <button
               type="button"
+              data-testid="right-tab-files"
               [class.active]="activeRightPanel === 'files'"
               (click)="setRightPanel('files')"
             >
@@ -938,6 +1045,7 @@
             @if (isDesktop) {
               <button
                 type="button"
+                data-testid="right-tab-git"
                 [class.active]="activeRightPanel === 'git'"
                 (click)="setRightPanel('git'); refreshGit()"
               >
@@ -946,6 +1054,7 @@
             }
             <button
               type="button"
+              data-testid="right-tab-settings"
               [class.active]="activeRightPanel === 'settings'"
               (click)="setRightPanel('settings')"
             >
@@ -954,487 +1063,134 @@
           </nav>
 
           @if (activeRightPanel === 'contributors') {
-            <article class="today-card">
-              <div class="section-label tight"><span>§00</span><b>Review Chain</b><i></i></div>
-              <p>“一次运行、一次 Git diff、一次 review snapshot，组成 v0.1 的完整反馈链。”</p>
-              <small>Local journal · 14:11</small>
-            </article>
-
-            <div class="section-label"><span>§04</span><b>Review Surface</b><i></i></div>
-            <div class="people-list">
-              <article class="person-row">
-                <span class="avatar blue">K</span>
-                <div><b>Run Evidence</b><span>Latest stdout and diagnostics</span></div>
-                <mark>Ready</mark>
-              </article>
-              <article class="person-row hovered">
-                <span class="avatar muted">AS</span>
-                <div><b>Future Assist</b><span>Reserved until behavior is reliable</span></div>
-                <aside class="profile-popover">
-                  <div class="popover-top">
-                    <span class="avatar muted large">AS</span>
-                    <div><b>Future Assist</b><span>disabled in v0.1</span></div>
-                  </div>
-                  <p>Kept as a visible integration slot. The current release does not pretend to provide model feedback.</p>
-                  <div class="popover-actions"><button type="button" disabled>Reserved</button><button type="button" (click)="setRightPanel('settings')">Settings</button></div>
-                </aside>
-              </article>
-              <article class="person-row">
-                <span class="avatar">JN</span>
-                <div><b>Journal</b><span>Notes and decisions</span></div>
-              </article>
-              <article class="person-row">
-                <span class="avatar coral">GT</span>
-                <div><b>Git Diff</b><span>Review changed files</span></div>
-              </article>
-              <article class="person-row">
-                <span class="avatar cyan">PR</span>
-                <div><b>Problems</b><span>Diagnostics and warnings</span></div>
-              </article>
-              <article class="person-row">
-                <span class="avatar green">S</span>
-                <div><b>sora</b><span>闲逛</span></div>
-              </article>
-            </div>
-
-            <div class="section-label"><span>§05</span><b>Away</b><i></i></div>
-            <div class="people-list quiet">
-              <article class="person-row"><span class="avatar muted">MZ</span><div><b>mizu</b><span>away · lunch</span></div></article>
-              <article class="person-row"><span class="avatar muted">KI</span><div><b>ki</b><span>away · docs</span></div></article>
-            </div>
+            <codeyo-review-panel (openSettings)="setRightPanel('settings')" />
           } @else if (activeRightPanel === 'files') {
-            <section class="side-file-system">
-              <div class="explorer-heading">
-                <span>Explorer</span>
-                <button
-                  class="explorer-actions-toggle"
-                  type="button"
-                  [class.active]="filesActionsMenuOpen"
-                  aria-label="Explorer actions"
-                  [attr.aria-expanded]="filesActionsMenuOpen"
-                  (click)="toggleFilesActionsMenu($event)"
-                >
-                  ...
-                </button>
-                @if (filesActionsMenuOpen) {
-                  <div
-                    class="explorer-actions-menu"
-                    (click)="$event.stopPropagation()"
-                    (contextmenu)="$event.preventDefault(); $event.stopPropagation()"
-                  >
-                    @if (isDesktop) {
-                      <button type="button" (click)="runFilesAction('open-folder')">Open Folder</button>
-                    }
-                    @if (isDesktop && !workspace && recentWorkspace) {
-                      <button type="button" (click)="runFilesAction('resume-workspace')">Resume Workspace</button>
-                    }
-                    @if (isDesktop && workspace && !workspace.trusted) {
-                      <button type="button" (click)="runFilesAction('trust-workspace')">Trust Workspace</button>
-                    }
-                    @if (!homeMode) {
-                      <button type="button" (click)="runFilesAction('new-file')">New File</button>
-                      <span></span>
-                      <button type="button" (click)="runFilesAction('review')">
-                        {{ isDesktop && activeBufferRunEvidence ? 'Review + Run Evidence' : 'Request Review' }}
-                      </button>
-                      <button type="button" (click)="runFilesAction('duplicate')">Duplicate</button>
-                      @if (isDesktop && workspace?.trusted) {
-                        <button type="button" (click)="runFilesAction('rename')">Rename</button>
-                      }
-                      @if (canDeleteActiveFile) {
-                        <button class="danger-action" type="button" (click)="runFilesAction('delete')">Delete</button>
-                      }
-                      @if (!assistantPanelOpen) {
-                        <button type="button" (click)="runFilesAction('assist')">Show Assist</button>
-                      }
-                    }
-                  </div>
-                }
-              </div>
-
-              <div class="vscode-tree">
-                <button class="tree-node folder root open" type="button" (click)="toggleWorkspace()">
-                  <span class="tree-caret">{{ workspaceExpanded ? '⌄' : '›' }}</span>
-                  <span class="tree-label">{{ explorerRootName }}</span>
-                </button>
-                @if (workspaceExpanded) {
-                  @for (entry of explorerTreeEntries; track entry.id) {
-                    @if (entry.kind === 'folder') {
-                      <button
-                        class="tree-node folder child"
-                        type="button"
-                        [class.open]="entry.expanded"
-                        [style.padding-left.px]="treeNodePadding(entry.depth)"
-                        (click)="toggleExplorerFolder(entry.path)"
-                      >
-                        <span class="tree-caret">{{ entry.expanded ? '⌄' : '›' }}</span>
-                        <span class="tree-label">{{ entry.name }}</span>
-                      </button>
-                    } @else if (entry.file) {
-                      <button
-                        class="tree-node file child"
-                        type="button"
-                        [class.active]="activeIdeFile.path === entry.file.path"
-                        [style.padding-left.px]="treeNodePadding(entry.depth)"
-                        [title]="entry.file.path"
-                        (click)="selectIdeFile(entry.file.path)"
-                      >
-                        <span class="file-glyph" [attr.data-kind]="explorerFileIconClass(entry.file)">
-                          {{ explorerFileIcon(entry.file) }}
-                        </span>
-                        <span class="tree-label">{{ entry.name }}</span>
-                        @if (explorerFileStatus(entry.file)) {
-                          <small>{{ explorerFileStatus(entry.file) }}</small>
-                        }
-                      </button>
-                    }
-                  }
-
-                  @if (explorerTreeEntries.length === 0 && !creatingFile) {
-                    <div class="tree-empty">
-                      <span>No buffer found</span>
-                      <button type="button" (click)="clearFileQuery()">Clear filter</button>
-                    </div>
-                  }
-
-                  @if (creatingFile) {
-                    <form class="new-file-row" (submit)="createFile(); $event.preventDefault()">
-                      <span>+</span>
-                      <input
-                        type="text"
-                        aria-label="New file name"
-                        placeholder="src/solution.py"
-                        [value]="newFileName"
-                        (input)="updateNewFileName($event)"
-                      />
-                      <button type="submit">↵</button>
-                      <button type="button" (click)="cancelNewFile()">×</button>
-                    </form>
-                  }
-                }
-              </div>
-
-              @if (workspace?.trusted && recoveryBufferCount > 0) {
-                <div class="vscode-outline explorer-recovery">
-                  <button class="outline-heading" type="button">
-                    <span>⌄</span>
-                    <b>Recovery</b>
-                    <em>{{ recoveryBufferCount }}</em>
-                  </button>
-                  @for (buffer of recoveryBuffers; track buffer.filePath) {
-                    <div class="recovery-line">
-                      <span>{{ buffer.filePath }}</span>
-                      <button type="button" (click)="restoreRecovery(buffer)">Restore</button>
-                      <button type="button" (click)="discardRecovery(buffer)">Discard</button>
-                    </div>
-                  }
-                </div>
-              }
-
-              <div class="vscode-outline">
-                <button class="outline-heading" type="button">
-                  <span>›</span>
-                  <b>Outline</b>
-                </button>
-              </div>
-            </section>
+            <codeyo-explorer-panel
+              [isDesktop]="isDesktop"
+              [workspace]="workspace"
+              [recentWorkspace]="recentWorkspace"
+              [homeMode]="homeMode"
+              [filesActionsMenuOpen]="filesActionsMenuOpen"
+              [workspaceExpanded]="workspaceExpanded"
+              [explorerRootName]="explorerRootName"
+              [explorerTreeEntries]="explorerTreeEntries"
+              [creatingFile]="creatingFile"
+              [newFileName]="newFileName"
+              [recoveryBufferCount]="recoveryBufferCount"
+              [recoveryBuffers]="recoveryBuffers"
+              [activeIdeFile]="activeIdeFile"
+              [activeBufferRunEvidence]="activeBufferRunEvidence"
+              [canDeleteActiveFile]="canDeleteActiveFile"
+              [assistantPanelOpen]="assistantPanelOpen"
+              [renamingFilePath]="renamingFilePath"
+              [renameDraft]="renameDraft"
+              (toggleActionsMenu)="toggleFilesActionsMenu($event)"
+              (closeActionsMenu)="filesActionsMenuOpen = false"
+              (runAction)="runFilesAction($event)"
+              (toggleWorkspace)="toggleWorkspace()"
+              (toggleFolder)="toggleExplorerFolder($event)"
+              (selectFile)="selectIdeFile($event)"
+              (clearFilter)="clearFileQuery()"
+              (createFile)="createFile()"
+              (updateNewFileName)="updateNewFileName($event)"
+              (cancelNewFile)="cancelNewFile()"
+              (updateRenameDraft)="updateRenameDraft($event)"
+              (commitRename)="commitRename()"
+              (cancelRename)="cancelRename()"
+              (restoreRecovery)="restoreRecovery($event)"
+              (discardRecovery)="discardRecovery($event)"
+            />
           } @else if (activeRightPanel === 'settings') {
-            <section class="settings-panel">
-              <div class="section-label tight"><span>§12</span><b>Project Settings</b><i></i></div>
-              <article class="settings-card">
-                <span class="mono tiny">Workspace</span>
-                <h3>{{ workspace?.name || 'No workspace' }}</h3>
-                <p>{{ workspace?.rootPath || 'Open a local folder to configure Codeyo.' }}</p>
-                <div class="settings-actions">
-                  <button class="btn accent" type="button" (click)="openDesktopWorkspace()">Open Folder</button>
-                  @if (workspace && !workspace.trusted) {
-                    <button class="btn primary" type="button" (click)="trustDesktopWorkspace()">Trust & Enable</button>
-                  }
-                </div>
-              </article>
-
-              <article class="settings-card density-settings">
-                <span class="mono tiny">Density</span>
-                <h3>Editor Density</h3>
-                <div class="storage-switch settings-storage" aria-label="Editor density">
-                  <button
-                    type="button"
-                    [class.active]="editorDensity === 'compact'"
-                    (click)="setEditorDensity('compact')"
-                  >
-                    Compact
-                  </button>
-                  <button
-                    type="button"
-                    [class.active]="editorDensity === 'comfortable'"
-                    (click)="setEditorDensity('comfortable')"
-                  >
-                    Comfortable
-                  </button>
-                </div>
-              </article>
-
-              <article class="settings-card font-settings">
-                <span class="mono tiny">Editor</span>
-                <h3>Font Size</h3>
-                <div class="font-size-control">
-                  <button type="button" aria-label="Decrease editor font size" (click)="stepEditorFontSize(-0.5)">A-</button>
-                  <input
-                    type="range"
-                    aria-label="Editor font size slider"
-                    [min]="editorFontSizeMin"
-                    [max]="editorFontSizeMax"
-                    step="0.5"
-                    [value]="editorFontSizePx"
-                    (input)="updateEditorFontSize($event)"
-                  />
-                  <input
-                    class="font-size-input"
-                    type="number"
-                    aria-label="Editor font size"
-                    [min]="editorFontSizeMin"
-                    [max]="editorFontSizeMax"
-                    step="0.5"
-                    [value]="editorFontSizePx"
-                    (input)="updateEditorFontSize($event)"
-                  />
-                  <button type="button" aria-label="Increase editor font size" (click)="stepEditorFontSize(0.5)">A+</button>
-                </div>
-                <div class="font-size-meta">
-                  <span>{{ editorFontSizePx }}px</span>
-                  <span>{{ editorLineHeightPx }}px line</span>
-                </div>
-                <button class="btn ghost" type="button" (click)="resetEditorFontSize()">Reset</button>
-              </article>
-
-              @if (workspace?.trusted) {
-                <article class="settings-card">
-                  <span class="mono tiny">Storage</span>
-                  <p>Journal, snapshots, run history, and recovery data are stored in the app database unless portable `.codeyo/` is enabled.</p>
-                  <div class="storage-switch settings-storage">
-                    <button type="button" [class.active]="workspace?.storageMode === 'app-db'" (click)="migrateStorage('app-db')">App DB</button>
-                    <button type="button" [class.active]="workspace?.storageMode === 'workspace-codeyo'" (click)="migrateStorage('workspace-codeyo')">.codeyo/</button>
-                  </div>
-                </article>
-
-                <article class="settings-card">
-                  <span class="mono tiny">Toolchain</span>
-                  <label>
-                    <span>Python Command</span>
-                    <input
-                      type="text"
-                      aria-label="Python command"
-                      [value]="pythonExecutable"
-                      (input)="updatePythonExecutable($event)"
-                    />
-                  </label>
-                  <label>
-                    <span>C++ Compiler</span>
-                    <input
-                      type="text"
-                      aria-label="C++ compiler command"
-                      [value]="cppExecutable"
-                      (input)="updateCppExecutable($event)"
-                    />
-                  </label>
-                  <div class="environment-card settings-environment">
-                    <div>
-                      <span>Environment</span>
-                      <b>{{ environmentSummary }}</b>
-                    </div>
-                    <button class="btn ghost" type="button" [disabled]="environmentBusy" (click)="checkEnvironment()">
-                      {{ environmentBusy ? 'Checking...' : 'Check Tools' }}
-                    </button>
-                    @if (environmentChecks.length > 0) {
-                      <div class="environment-list">
-                        @for (check of environmentChecks; track check.id) {
-                          <article [class.missing]="!check.available">
-                            <strong>{{ check.label }}</strong>
-                            <em>{{ toolCheckStatus(check) }}</em>
-                            <small>{{ check.version || check.message }}</small>
-                          </article>
-                        }
-                      </div>
-                    }
-                  </div>
-                </article>
-
-                <article class="settings-card">
-                  <span class="mono tiny">Safety</span>
-                  <div class="settings-stats">
-                    <span><b>{{ editedFileCount }}</b> Unsaved</span>
-                    <span><b>{{ recoveryBufferCount }}</b> Recovery</span>
-                    <span><b>{{ journalEntries.length }}</b> Journal</span>
-                  </div>
-                  <div class="storage-switch settings-storage" aria-label="Auto-save setting">
-                    <button type="button" [class.active]="!autoSaveEnabled" (click)="setAutoSave(false)">Manual</button>
-                    <button type="button" [class.active]="autoSaveEnabled" (click)="setAutoSave(true)">Auto Save</button>
-                  </div>
-                  <div class="settings-actions">
-                    <button class="btn ghost" type="button" [disabled]="!canSaveAll" (click)="saveAllFiles()">Save All</button>
-                    <button class="btn ghost" type="button" (click)="setRightPanel('files')">Open Recovery</button>
-                  </div>
-                </article>
-              }
-            </section>
+            <codeyo-settings-panel
+              [workspace]="workspace"
+              [editorDensity]="editorDensity"
+              [editorFontSizeMin]="editorFontSizeMin"
+              [editorFontSizeMax]="editorFontSizeMax"
+              [editorFontSizePx]="editorFontSizePx"
+              [editorLineHeightPx]="editorLineHeightPx"
+              [editorFontPresets]="editorFontPresets"
+              [editorThemePresets]="editorThemePresets"
+              [editorFontId]="editorFontId"
+              [editorThemeId]="editorThemeId"
+              [pythonExecutable]="pythonExecutable"
+              [cppExecutable]="cppExecutable"
+              [pythonFormatterCommand]="pythonFormatterCommand"
+              [environmentSummary]="environmentSummary"
+              [environmentBusy]="environmentBusy"
+              [environmentChecks]="environmentChecks"
+              [languageServices]="languageWorkspaceStatus?.services || []"
+              [editedFileCount]="editedFileCount"
+              [recoveryBufferCount]="recoveryBufferCount"
+              [journalEntryCount]="journalEntries.length"
+              [autoSaveEnabled]="autoSaveEnabled"
+              [lspDiagnosticsEnabled]="lspDiagnosticsEnabled"
+              [autocompleteEnabled]="autocompleteEnabled"
+              [spellCheckEnabled]="spellCheckEnabled"
+              [formatOnSaveEnabled]="formatOnSaveEnabled"
+              [canSaveAll]="canSaveAll"
+              (openWorkspace)="openDesktopWorkspace()"
+              (trustWorkspace)="trustDesktopWorkspace()"
+              (setEditorDensity)="setEditorDensity($event)"
+              (stepEditorFontSize)="stepEditorFontSize($event)"
+              (updateEditorFontSize)="updateEditorFontSize($event)"
+              (resetEditorFontSize)="resetEditorFontSize()"
+              (setEditorFont)="setEditorFont($event)"
+              (setEditorTheme)="setEditorTheme($event)"
+              (migrateStorage)="migrateStorage($event)"
+              (updatePythonExecutable)="updatePythonExecutable($event)"
+              (updateCppExecutable)="updateCppExecutable($event)"
+              (updatePythonFormatter)="updatePythonFormatter($event)"
+              (checkEnvironment)="checkEnvironment()"
+              (setAutoSave)="setAutoSave($event)"
+              (setLspDiagnostics)="setLspDiagnostics($event)"
+              (setAutocomplete)="setAutocomplete($event)"
+              (setSpellCheck)="setSpellCheck($event)"
+              (setFormatOnSave)="setFormatOnSave($event)"
+              (saveAll)="saveAllFiles()"
+              (openRecovery)="setRightPanel('files')"
+            />
           } @else {
-            <section class="git-panel">
-              <div class="section-label tight"><span>§09</span><b>Git Changes</b><i></i></div>
-              <p class="git-notice">{{ gitNotice }}</p>
-              @if (workspace?.trusted && gitStatus) {
-                <div class="git-branch">
-                  <b>{{ gitStatus.branch }}</b>
-                  <span>↑ {{ gitStatus.ahead }} · ↓ {{ gitStatus.behind }}</span>
-                </div>
-                @if (gitBranches.length > 0) {
-                  <div class="git-checkout">
-                    <label>
-                      <span>Checkout Branch</span>
-                      <select aria-label="Checkout branch" [value]="selectedBranch" (change)="updateSelectedBranch($event)">
-                        @for (branch of gitBranches; track branch) {
-                          <option [value]="branch">{{ branch }}</option>
-                        }
-                      </select>
-                    </label>
-                    <button
-                      class="btn ghost"
-                      type="button"
-                      [disabled]="gitBusy || selectedBranch === gitStatus.branch"
-                      (click)="switchBranch()"
-                    >
-                      Switch
-                    </button>
-                    <button
-                      class="danger-action"
-                      type="button"
-                      [disabled]="gitBusy || !canDeleteSelectedBranch"
-                      (click)="deleteSelectedBranch()"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                }
-                <div class="git-change-totals">
-                  <span><b>{{ stagedGitFiles.length }}</b> Staged <em>+{{ gitStagedSummary.additions }} / -{{ gitStagedSummary.deletions }}</em></span>
-                  <span><b>{{ unstagedGitFiles.length }}</b> Unstaged</span>
-                </div>
-                <div class="git-files">
-                  @if (stagedGitFiles.length > 0) {
-                    <h4>Staged For Commit</h4>
-                    @for (file of stagedGitFiles; track file.path) {
-                      <article [class.comparing]="gitComparison?.path === file.path && gitComparison?.mode === 'staged'">
-                        <span>{{ file.index }}</span>
-                        <b>{{ file.originalPath ? file.originalPath + ' → ' : '' }}{{ file.path }}</b>
-                        <button type="button" [disabled]="gitBusy || gitCompareBusy" (click)="showGitDiff(file.path, 'staged')">Compare</button>
-                        <button type="button" [disabled]="gitBusy" (click)="gitAction({ type: 'unstage', path: file.path, originalPath: file.originalPath })">Unstage</button>
-                      </article>
-                    }
-                  }
-                  @if (unstagedGitFiles.length > 0) {
-                    <h4>Working Tree</h4>
-                    @for (file of unstagedGitFiles; track file.path) {
-                      <article [class.comparing]="gitComparison?.path === file.path && gitComparison?.mode === 'unstaged'">
-                        <span>{{ file.workingTree }}</span>
-                        <b>{{ file.originalPath ? file.originalPath + ' → ' : '' }}{{ file.path }}</b>
-                        <button type="button" [disabled]="gitBusy || gitCompareBusy" (click)="showGitDiff(file.path, 'unstaged')">Compare</button>
-                        <button type="button" [disabled]="gitBusy" (click)="gitAction({ type: 'stage', path: file.path, originalPath: file.originalPath })">Stage</button>
-                        @if (file.workingTree !== '?') {
-                          <button class="danger-action" type="button" [disabled]="gitBusy" (click)="discardGitFile(file.path)">Discard</button>
-                        }
-                      </article>
-                    }
-                  }
-                  @if (stagedGitFiles.length === 0 && unstagedGitFiles.length === 0) {
-                    <p class="git-clean">WORKTREE CLEAN</p>
-                  }
-                </div>
-                <section class="git-commit-desk">
-                  <div class="section-label tight"><span>§10</span><b>Commit Desk</b><i></i></div>
-                  <form class="git-commit" (submit)="reviewCommit(); $event.preventDefault()">
-                    <input
-                      type="text"
-                      aria-label="Commit message"
-                      placeholder="COMMIT MESSAGE"
-                      [value]="commitMessage"
-                      (input)="updateCommitMessage($event)"
-                    />
-                    @if (recentRunResults.length > 0) {
-                      <label class="git-run-evidence">
-                        <span>Run Evidence</span>
-                        <select
-                          aria-label="Attach run evidence to commit"
-                          [value]="selectedCommitRunResultId"
-                          (change)="updateSelectedCommitRun($event)"
-                        >
-                          <option value="">NO RUN EVIDENCE</option>
-                          @for (result of recentRunResults; track result.id) {
-                            <option [value]="result.id">{{ runEvidenceLabel(result) }}</option>
-                          }
-                        </select>
-                      </label>
-                    }
-                    <button class="btn primary" type="submit" [disabled]="gitBusy || !canReviewCommit">Review</button>
-                  </form>
-                  @if (commitReviewOpen) {
-                    <article class="git-commit-review">
-                      <span>Ready To Commit</span>
-                      <p>“{{ commitMessage }}”</p>
-                      <b>{{ gitStagedSummary.files.length }} files · +{{ gitStagedSummary.additions }} / -{{ gitStagedSummary.deletions }}</b>
-                      @for (file of gitStagedSummary.files; track file.path) {
-                        <small>{{ file.path }} · {{ file.binary ? 'binary' : '+' + file.additions + ' / -' + file.deletions }}</small>
-                      }
-                      <div>
-                        <button class="btn ghost" type="button" (click)="cancelCommitReview()">Cancel</button>
-                        <button class="btn accent" type="button" [disabled]="gitBusy" (click)="commitReviewedChanges()">Commit Staged</button>
-                      </div>
-                    </article>
-                  }
-                </section>
-                <form class="git-branch-form" (submit)="createBranch(); $event.preventDefault()">
-                  <input
-                    type="text"
-                    aria-label="New branch name"
-                    placeholder="NEW BRANCH NAME"
-                    [value]="branchName"
-                    (input)="updateBranchName($event)"
-                  />
-                  <button class="btn ghost" type="submit" [disabled]="gitBusy">New Branch</button>
-                </form>
-                <div class="git-remote-actions">
-                  <button class="btn ghost" type="button" [disabled]="gitBusy" (click)="pullRemote()">Pull</button>
-                  <button class="btn accent" type="button" [disabled]="gitBusy" (click)="pushRemote()">
-                    {{ gitBusy ? 'Working...' : 'Push' }}
-                  </button>
-                </div>
-                <section class="git-history">
-                  <div class="section-label tight"><span>§11</span><b>History</b><i></i></div>
-                  <input
-                    class="git-history-search"
-                    type="text"
-                    aria-label="Filter commit history"
-                    placeholder="FILTER BY SHA, AUTHOR, OR MESSAGE"
-                    [value]="gitHistoryQuery"
-                    (input)="updateGitHistoryQuery($event)"
-                  />
-                  <div class="git-history-list">
-                    @for (commit of filteredGitHistory; track commit.revision) {
-                      <button
-                        class="git-history-row"
-                        type="button"
-                        [class.active]="gitHistoryDetail?.revision === commit.revision"
-                        (click)="openGitHistoryCommit(commit)"
-                      >
-                        <span>{{ commit.shortRevision }}</span>
-                        <b>{{ commit.subject }}</b>
-                        <small>{{ commit.author }} · {{ commit.authoredAt.slice(0, 10) }}</small>
-                      </button>
-                    } @empty {
-                      <p class="git-history-empty">{{ gitHistory.length ? 'NO COMMITS MATCH FILTER.' : 'NO COMMITS YET.' }}</p>
-                    }
-                  </div>
-                </section>
-              }
-            </section>
+            <codeyo-git-panel
+              [workspace]="workspace"
+              [gitNotice]="gitNotice"
+              [gitStatus]="gitStatus"
+              [gitBranches]="gitBranches"
+              [selectedBranch]="selectedBranch"
+              [gitBusy]="gitBusy"
+              [gitCompareBusy]="gitCompareBusy"
+              [canDeleteSelectedBranch]="canDeleteSelectedBranch"
+              [stagedGitFiles]="stagedGitFiles"
+              [unstagedGitFiles]="unstagedGitFiles"
+              [gitStagedSummary]="gitStagedSummary"
+              [gitComparison]="gitComparison"
+              [commitMessage]="commitMessage"
+              [recentRunResults]="recentRunResults"
+              [selectedCommitRunResultId]="selectedCommitRunResultId"
+              [canReviewCommit]="canReviewCommit"
+              [commitReviewOpen]="commitReviewOpen"
+              [branchName]="branchName"
+              [gitHistoryQuery]="gitHistoryQuery"
+              [filteredGitHistory]="filteredGitHistory"
+              [gitHistory]="gitHistory"
+              [gitHistoryDetailRevision]="gitHistoryDetail?.revision || ''"
+              (updateSelectedBranch)="updateSelectedBranch($event)"
+              (switchBranch)="switchBranch()"
+              (deleteSelectedBranch)="deleteSelectedBranch()"
+              (showGitDiff)="showGitDiff($event.path, $event.mode)"
+              (gitAction)="gitAction($event)"
+              (discardGitFile)="discardGitFile($event)"
+              (updateCommitMessage)="updateCommitMessage($event)"
+              (updateSelectedCommitRun)="updateSelectedCommitRun($event)"
+              (reviewCommit)="reviewCommit()"
+              (cancelCommitReview)="cancelCommitReview()"
+              (commitReviewedChanges)="commitReviewedChanges()"
+              (updateBranchName)="updateBranchName($event)"
+              (createBranch)="createBranch()"
+              (pullRemote)="pullRemote()"
+              (pushRemote)="pushRemote()"
+              (updateGitHistoryQuery)="updateGitHistoryQuery($event)"
+              (openGitHistoryCommit)="openGitHistoryCommit($event)"
+            />
           }
         </aside>
       </div>
@@ -1533,6 +1289,53 @@
     </section>
 
   </main>
+
+  <footer
+    class="workspace-statusbar"
+    data-testid="workspace-statusbar"
+    role="status"
+    aria-live="polite"
+    aria-label="Workspace status"
+  >
+    <span class="workspace-statusbar-label">Status</span>
+    <span class="workspace-statusbar-message" data-testid="workspace-notice">{{ workspaceNotice }}</span>
+  </footer>
+
+  @if (confirmDialog) {
+    <section
+      class="app-confirm-modal"
+      [class.danger]="confirmDialog.variant === 'danger'"
+      [class.warning]="confirmDialog.variant === 'warning'"
+      role="dialog"
+      aria-modal="true"
+      [attr.aria-label]="confirmDialog.title"
+      (click)="confirmDialogCancel()"
+      (keydown.escape)="confirmDialogCancel()"
+    >
+      <article (click)="$event.stopPropagation()">
+        <span class="mono tiny">{{ confirmDialog.variant === 'danger' ? 'Confirm destructive action' : 'Confirm action' }}</span>
+        <h2>{{ confirmDialog.title }}</h2>
+        <p>
+          <b>{{ confirmDialog.message }}</b>
+          @if (confirmDialog.details) {
+            <small>{{ confirmDialog.details }}</small>
+          }
+        </p>
+        <div>
+          <button class="btn ghost" type="button" (click)="confirmDialogCancel()">{{ confirmDialog.cancelLabel }}</button>
+          <button
+            class="btn"
+            [class.accent]="confirmDialog.variant !== 'danger'"
+            [class.danger-action]="confirmDialog.variant === 'danger'"
+            type="button"
+            (click)="confirmDialogAccept()"
+          >
+            {{ confirmDialog.confirmLabel }}
+          </button>
+        </div>
+      </article>
+    </section>
+  }
 
   @if (workspaceTrustPromptOpen && workspace) {
     <section class="workspace-trust-modal" role="dialog" aria-modal="true" aria-label="Trust workspace">

@@ -1,0 +1,221 @@
+<section class="settings-panel">
+  <div class="section-label tight"><span>§12</span><b>Project Settings</b><i></i></div>
+  @if (!workspace) {
+    <codeyo-empty-state
+      label="Workspace"
+      title="No workspace"
+      message="Open a local folder to configure Codeyo project settings."
+      details="Browser preview mode cannot validate files, terminal, LSP, or toolchain settings."
+      actionLabel="Open Folder"
+      (action)="openWorkspace.emit()"
+    />
+  } @else if (!workspace.trusted) {
+    <codeyo-empty-state
+      label="Workspace"
+      title="Workspace not trusted"
+      message="Trust this folder before enabling terminal, runner, language service, and file writes."
+      [details]="workspace.rootPath"
+      actionLabel="Trust & Enable"
+      variant="warning"
+      (action)="trustWorkspace.emit()"
+    />
+  } @else {
+    <article class="settings-card">
+      <span class="mono tiny">Workspace</span>
+      <h3>{{ workspace.name }}</h3>
+      <p>{{ workspace.rootPath }}</p>
+      <div class="settings-actions">
+        <button class="btn accent" type="button" (click)="openWorkspace.emit()">Open Folder</button>
+      </div>
+    </article>
+  }
+
+  <article class="settings-card density-settings">
+    <span class="mono tiny">Density</span>
+    <h3>Editor Density</h3>
+    <div class="storage-switch settings-storage" aria-label="Editor density">
+      <button
+        type="button"
+        [class.active]="editorDensity === 'compact'"
+        (click)="setEditorDensity.emit('compact')"
+      >
+        Compact
+      </button>
+      <button
+        type="button"
+        [class.active]="editorDensity === 'comfortable'"
+        (click)="setEditorDensity.emit('comfortable')"
+      >
+        Comfortable
+      </button>
+    </div>
+  </article>
+
+  <article class="settings-card font-settings">
+    <span class="mono tiny">Editor</span>
+    <h3>Font Size</h3>
+    <div class="font-size-control">
+      <button type="button" aria-label="Decrease editor font size" (click)="stepEditorFontSize.emit(-0.5)">A-</button>
+      <input
+        type="range"
+        aria-label="Editor font size slider"
+        [min]="editorFontSizeMin"
+        [max]="editorFontSizeMax"
+        step="0.5"
+        [value]="editorFontSizePx"
+        [style.--font-size-progress]="editorFontSizeProgress"
+        (input)="updateEditorFontSize.emit($event)"
+      />
+      <input
+        class="font-size-input"
+        type="number"
+        aria-label="Editor font size"
+        [min]="editorFontSizeMin"
+        [max]="editorFontSizeMax"
+        step="0.5"
+        [value]="editorFontSizePx"
+        (input)="updateEditorFontSize.emit($event)"
+      />
+      <button type="button" aria-label="Increase editor font size" (click)="stepEditorFontSize.emit(0.5)">A+</button>
+    </div>
+    <div class="font-size-meta">
+      <span>{{ editorFontSizePx }}px</span>
+      <span>{{ editorLineHeightPx }}px line</span>
+    </div>
+    <label class="settings-select">
+      <span>Font Family</span>
+      <select
+        aria-label="Editor font family"
+        [value]="editorFontId"
+        (change)="updateEditorFontSelection($event)"
+      >
+        @for (font of editorFontPresets; track font.id) {
+          <option [value]="font.id">{{ font.name }}</option>
+        }
+      </select>
+    </label>
+    <button class="btn ghost" type="button" (click)="resetEditorFontSize.emit()">Reset</button>
+  </article>
+
+  <article class="settings-card theme-settings">
+    <span class="mono tiny">Theme</span>
+    <h3>Editor Theme</h3>
+    <label class="settings-select">
+      <span>Theme Preset</span>
+      <select
+        aria-label="Editor theme"
+        [value]="editorThemeId"
+        (change)="updateEditorThemeSelection($event)"
+      >
+        @for (theme of editorThemePresets; track theme.id) {
+          <option [value]="theme.id">{{ theme.name }}</option>
+        }
+      </select>
+    </label>
+    @if (activeTheme; as theme) {
+      <div class="theme-preview" aria-label="Selected editor theme preview">
+        <span>{{ theme.name }}</span>
+        <div class="theme-swatches" aria-hidden="true">
+          @for (swatch of theme.swatches; track swatch) {
+            <i [style.background]="swatch"></i>
+          }
+        </div>
+      </div>
+    }
+  </article>
+
+  @if (workspace?.trusted) {
+    <article class="settings-card">
+      <span class="mono tiny">Storage</span>
+      <p>Journal, snapshots, run history, and recovery data are stored in the app database unless portable `.codeyo/` is enabled.</p>
+      <div class="storage-switch settings-storage">
+        <button type="button" [class.active]="workspace?.storageMode === 'app-db'" (click)="migrateStorage.emit('app-db')">App DB</button>
+        <button type="button" [class.active]="workspace?.storageMode === 'workspace-codeyo'" (click)="migrateStorage.emit('workspace-codeyo')">.codeyo/</button>
+      </div>
+    </article>
+
+    <article class="settings-card">
+      <span class="mono tiny">Toolchain</span>
+      <label>
+        <span>Python Command</span>
+        <input
+          type="text"
+          aria-label="Python command"
+          [value]="pythonExecutable"
+          (input)="updatePythonExecutable.emit($event)"
+        />
+      </label>
+      <label>
+        <span>C++ Compiler</span>
+        <input
+          type="text"
+          aria-label="C++ compiler command"
+          [value]="cppExecutable"
+          (input)="updateCppExecutable.emit($event)"
+        />
+      </label>
+      <label>
+        <span>Python Formatter</span>
+        <input
+          type="text"
+          aria-label="Python formatter command"
+          placeholder="optional, e.g. black"
+          [value]="pythonFormatterCommand"
+          (input)="updatePythonFormatter.emit($event)"
+        />
+      </label>
+      <div class="environment-card settings-environment">
+        <div>
+          <span>Environment</span>
+          <b>{{ environmentSummary }}</b>
+        </div>
+        <button class="btn ghost" type="button" [disabled]="environmentBusy" (click)="checkEnvironment.emit()">
+          {{ environmentBusy ? 'Checking...' : 'Check Tools' }}
+        </button>
+        @if (environmentChecks.length > 0) {
+          <div class="environment-list">
+            @for (check of environmentChecks; track check.id) {
+              <article [class.missing]="!check.available">
+                <strong>{{ check.label }}</strong>
+                <em>{{ toolCheckStatus(check) }}</em>
+                <small>{{ check.version || check.message }}</small>
+              </article>
+            }
+          </div>
+        }
+      </div>
+    </article>
+
+    <article class="settings-card">
+      <span class="mono tiny">Safety</span>
+      <div class="settings-stats">
+        <span><b>{{ editedFileCount }}</b> Unsaved</span>
+        <span><b>{{ recoveryBufferCount }}</b> Recovery</span>
+        <span><b>{{ journalEntryCount }}</b> Journal</span>
+      </div>
+      <div class="storage-switch settings-storage" aria-label="Auto-save setting">
+        <button type="button" [class.active]="!autoSaveEnabled" (click)="setAutoSave.emit(false)">Manual</button>
+        <button type="button" [class.active]="autoSaveEnabled" (click)="setAutoSave.emit(true)">Auto Save</button>
+      </div>
+      <div class="storage-switch settings-storage" aria-label="IDE intelligence settings">
+        <button type="button" [class.active]="lspDiagnosticsEnabled" (click)="setLspDiagnostics.emit(!lspDiagnosticsEnabled)">LSP</button>
+        <button type="button" [class.active]="autocompleteEnabled" (click)="setAutocomplete.emit(!autocompleteEnabled)">Complete</button>
+        <button type="button" [class.active]="spellCheckEnabled" (click)="setSpellCheck.emit(!spellCheckEnabled)">Spell</button>
+        <button type="button" [class.active]="formatOnSaveEnabled" (click)="setFormatOnSave.emit(!formatOnSaveEnabled)">Format Save</button>
+      </div>
+      @for (service of unavailableLanguageServices; track service.language) {
+        <codeyo-empty-state
+          label="Language Service"
+          [title]="languageServiceTitle(service)"
+          [message]="languageServiceMessage(service)"
+          details="Code editing still works; diagnostics, completion, hover, or definition may be limited for this language."
+          variant="warning"
+        />
+      }
+      <div class="settings-actions">
+        <button class="btn ghost" type="button" [disabled]="!canSaveAll" (click)="saveAll.emit()">Save All</button>
+        <button class="btn ghost" type="button" (click)="openRecovery.emit()">Open Recovery</button>
+      </div>
+    </article>
+  }
+</section>

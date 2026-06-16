@@ -3,6 +3,8 @@ import { vi } from 'vitest';
 import { App } from './app';
 import { DesktopTerminalComponent } from './desktop-terminal.component';
 import { CodeyoDesktopApi, RunResult, WorkspaceFileChange, WorkspaceHandle } from './desktop-api';
+import { editorFontPresets, editorThemePresets } from './editor-appearance';
+import { SettingsPanelComponent } from './panels/settings-panel.component';
 
 function createDesktopHarness(
   fileContents: Record<string, string>,
@@ -139,6 +141,25 @@ function createDesktopHarness(
       history: vi.fn(async () => []),
       getResult: vi.fn(async () => null),
     },
+    language: {
+      status: vi.fn(async () => ({
+        workspaceId: workspace.id,
+        services: [
+          { language: 'python', state: 'ready', label: 'Pyright' },
+          { language: 'cpp', state: 'missing-tool', label: 'clangd', message: 'clangd is not available on PATH' },
+          { language: 'spell', state: 'ready', label: 'Spell check ready' },
+        ],
+      })),
+      openDocument: vi.fn(async () => ({ opened: true as const })),
+      changeDocument: vi.fn(async () => ({ changed: true as const })),
+      closeDocument: vi.fn(async () => ({ closed: true as const })),
+      completion: vi.fn(async () => ({ available: true, items: [{ label: 'print', kind: 'function' }] })),
+      hover: vi.fn(async () => ({ available: true, contents: 'hover docs' })),
+      definition: vi.fn(async () => ({ available: true, locations: [{ path: 'main.py', line: 1, column: 1 }] })),
+      formatDocument: vi.fn(async () => ({ available: true, edit: { edits: [] } })),
+      onDiagnostics: vi.fn(() => () => undefined),
+      onStatus: vi.fn(() => () => undefined),
+    },
     git: {
       status: vi.fn(async () => ({ branch: 'main', ahead: 0, behind: 0, files: [] })),
       branches: vi.fn(async () => ['main', 'feature/editor']),
@@ -255,6 +276,19 @@ function createDesktopHarness(
   };
 }
 
+function clickAppConfirm(
+  fixture: { nativeElement: HTMLElement; detectChanges: () => void },
+  confirmed = true,
+): HTMLElement {
+  fixture.detectChanges();
+  const modal = fixture.nativeElement.querySelector('.app-confirm-modal') as HTMLElement;
+  expect(modal).toBeTruthy();
+  const buttons = Array.from(modal.querySelectorAll('button')) as HTMLButtonElement[];
+  buttons[confirmed ? buttons.length - 1 : 0].click();
+  fixture.detectChanges();
+  return modal;
+}
+
 describe('App', () => {
   beforeEach(async () => {
     Object.defineProperty(window, 'matchMedia', {
@@ -300,7 +334,7 @@ describe('App', () => {
       });
     }
     await TestBed.configureTestingModule({
-      imports: [App, DesktopTerminalComponent],
+      imports: [App, DesktopTerminalComponent, SettingsPanelComponent],
     }).compileComponents();
   });
 
@@ -326,6 +360,22 @@ describe('App', () => {
     expect(compiled.querySelector('.side-file-system')).toBeTruthy();
     expect(compiled.querySelector('.codeyo-editor-host')?.getAttribute('aria-label')).toContain('fib.py');
     expect(compiled.querySelector('.cm-editor')).toBeTruthy();
+  });
+
+  it('should render workspace notices in the status bar so file errors are visible', async () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    expect(compiled.querySelector('[data-testid="workspace-statusbar"]')).toBeTruthy();
+
+    app.workspaceNotice = 'WORKSPACE FILE IS TOO LARGE · big.bin';
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="workspace-notice"]')?.textContent).toContain(
+      'WORKSPACE FILE IS TOO LARGE',
+    );
   });
 
   it('should start the desktop app on a read-only README home before a folder is opened', async () => {
@@ -417,6 +467,116 @@ describe('App', () => {
     expect(app.editorFontSizePx).toBe(15.5);
     expect(shell.style.getPropertyValue('--codeyo-editor-font-size')).toBe('15.5px');
     expect(shell.style.getPropertyValue('--codeyo-editor-line-height')).toBe('24px');
+
+    const sliderProgress = (fontSize: number) => {
+      const settingsFixture = TestBed.createComponent(SettingsPanelComponent);
+      settingsFixture.componentInstance.editorFontSizePx = fontSize;
+      settingsFixture.detectChanges();
+      const slider = settingsFixture.nativeElement.querySelector(
+        'input[aria-label="Editor font size slider"]',
+      ) as HTMLInputElement;
+      return slider.style.getPropertyValue('--font-size-progress');
+    };
+
+    expect(sliderProgress(15.5)).toBe('58.33%');
+    expect(sliderProgress(12)).toBe('0%');
+    expect(sliderProgress(18)).toBe('100%');
+  });
+
+  it('should apply and persist editor font family and theme settings', () => {
+    const firstFixture = TestBed.createComponent(App);
+    const firstApp = firstFixture.componentInstance;
+    firstApp.setEditorFont('menlo');
+    firstApp.setEditorTheme('dracula');
+    expect(localStorage.getItem('codeyo.editor-font-family.v1')).toBe('menlo');
+    expect(localStorage.getItem('codeyo.editor-theme.v1')).toBe('dracula');
+    firstFixture.destroy();
+
+    const secondFixture = TestBed.createComponent(App);
+    secondFixture.detectChanges();
+
+    const app = secondFixture.componentInstance;
+    const shell = secondFixture.nativeElement.querySelector('.studio-shell') as HTMLElement;
+    expect(app.editorFontId).toBe('menlo');
+    expect(app.editorThemeId).toBe('dracula');
+    expect(shell.style.getPropertyValue('--codeyo-editor-font-family')).toContain('Menlo');
+    expect(shell.style.getPropertyValue('--codeyo-editor-bg')).toBe('#282a36');
+    expect(shell.style.getPropertyValue('--codeyo-syntax-keyword')).toBe('#ff79c6');
+  });
+
+  it('should fall back to default editor font and theme when storage has invalid ids', () => {
+    localStorage.setItem('codeyo.editor-font-family.v1', 'papyrus');
+    localStorage.setItem('codeyo.editor-theme.v1', 'neon');
+
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    const app = fixture.componentInstance;
+    const shell = fixture.nativeElement.querySelector('.studio-shell') as HTMLElement;
+    expect(app.editorFontId).toBe('jetbrains-mono');
+    expect(app.editorThemeId).toBe('codeyo-editorial');
+    expect(shell.style.getPropertyValue('--codeyo-editor-bg')).toBe('#1a1a1a');
+    expect(shell.style.getPropertyValue('--codeyo-syntax-comment')).toBe('#6a9955');
+  });
+
+  it('should emit editor font and theme selections from the settings panel', () => {
+    const fixture = TestBed.createComponent(SettingsPanelComponent);
+    const panel = fixture.componentInstance;
+    const fontHandler = vi.fn();
+    const themeHandler = vi.fn();
+    panel.editorFontPresets = editorFontPresets;
+    panel.editorThemePresets = editorThemePresets;
+    panel.setEditorFont.subscribe(fontHandler);
+    panel.setEditorTheme.subscribe(themeHandler);
+    fixture.detectChanges();
+
+    const fontSelect = fixture.nativeElement.querySelector('select[aria-label="Editor font family"]') as HTMLSelectElement;
+    fontSelect.value = 'fira-code';
+    fontSelect.dispatchEvent(new Event('change'));
+    expect(fontHandler).toHaveBeenCalledWith('fira-code');
+
+    const themeSelect = fixture.nativeElement.querySelector('select[aria-label="Editor theme"]') as HTMLSelectElement;
+    themeSelect.value = 'one-dark-pro';
+    themeSelect.dispatchEvent(new Event('change'));
+    expect(themeHandler).toHaveBeenCalledWith('one-dark-pro');
+    expect(fixture.nativeElement.textContent).toContain('Editor Theme');
+  });
+
+  it('should render a unified settings empty state before a workspace is open', () => {
+    const fixture = TestBed.createComponent(SettingsPanelComponent);
+    const panel = fixture.componentInstance;
+    const openHandler = vi.fn();
+    panel.openWorkspace.subscribe(openHandler);
+    fixture.detectChanges();
+
+    const emptyState = fixture.nativeElement.querySelector('codeyo-empty-state') as HTMLElement;
+    expect(emptyState.textContent).toContain('No workspace');
+    emptyState.querySelector('button')?.click();
+    expect(openHandler).toHaveBeenCalled();
+  });
+
+  it('should render unavailable language services as settings empty states', () => {
+    const fixture = TestBed.createComponent(SettingsPanelComponent);
+    const panel = fixture.componentInstance;
+    panel.workspace = {
+      id: 'workspace-1',
+      rootPath: '/tmp/codeyo-test',
+      name: 'codeyo-test',
+      trusted: true,
+      platform: 'darwin',
+      storageMode: 'app-db',
+    };
+    panel.languageServices = [{
+      language: 'cpp',
+      state: 'missing-tool',
+      label: 'clangd',
+      message: 'clangd is not available on PATH',
+    }];
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('clangd missing');
+    expect(text).toContain('clangd is not available on PATH');
   });
 
   it('should resize and persist the workspace and explorer rails', () => {
@@ -562,6 +722,72 @@ describe('App', () => {
     expect(app.creatingFile).toBe(true);
   });
 
+  it('should open file actions from the explorer context menu', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+
+    const fileButtons = Array.from(fixture.nativeElement.querySelectorAll('.tree-node.file')) as HTMLButtonElement[];
+    const testsFile = fileButtons.find((button) => button.textContent?.includes('tests.py')) as HTMLButtonElement;
+    const event = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 760,
+      clientY: 170,
+    });
+    testsFile.dispatchEvent(event);
+    fixture.detectChanges();
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(app.activeIdeFile.path).toBe('tests.py');
+    const contextMenu = fixture.nativeElement.querySelector('.explorer-context-menu') as HTMLElement;
+    expect(contextMenu).toBeTruthy();
+    expect(contextMenu.textContent).toContain('New File');
+    expect(contextMenu.textContent).toContain('Duplicate');
+    expect(contextMenu.textContent).toContain('Copy Path');
+    expect(contextMenu.textContent).toContain('Reveal Active File');
+
+    const newFileButton = Array.from(contextMenu.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('New File')) as HTMLButtonElement;
+    newFileButton.click();
+    fixture.detectChanges();
+    expect(app.creatingFile).toBe(true);
+    expect(fixture.nativeElement.querySelector('.explorer-context-menu')).toBeFalsy();
+  });
+
+  it('should show the full file context menu for writable buffers', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    app.ideFiles.push({
+      name: 'scratch.py',
+      path: 'scratch.py',
+      lang: 'python',
+      status: 'new',
+      builtIn: false,
+      lines: ['print("scratch")'],
+    });
+    app.activeIdePath = 'scratch.py';
+    (app as unknown as { rebuildExplorerTree: () => void }).rebuildExplorerTree();
+    fixture.detectChanges();
+
+    const fileButtons = Array.from(fixture.nativeElement.querySelectorAll('.tree-node.file')) as HTMLButtonElement[];
+    const scratchFile = fileButtons.find((button) => button.textContent?.includes('scratch.py')) as HTMLButtonElement;
+    scratchFile.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 760,
+      clientY: 170,
+    }));
+    fixture.detectChanges();
+
+    const contextMenu = fixture.nativeElement.querySelector('.explorer-context-menu') as HTMLElement;
+    expect(contextMenu.textContent).toContain('New File');
+    expect(contextMenu.textContent).toContain('Rename');
+    expect(contextMenu.textContent).toContain('Duplicate');
+    expect(contextMenu.textContent).toContain('Delete');
+    expect(contextMenu.textContent).toContain('Copy Path');
+  });
+
   it('should filter files and execute terminal commands against buffers', () => {
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
@@ -705,7 +931,6 @@ describe('App', () => {
 
   it('should block deleting unsaved desktop files', async () => {
     const desktop = createDesktopHarness({ 'main.py': 'print("ready")\n' });
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     window.codeyo = desktop.api;
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
@@ -713,23 +938,50 @@ describe('App', () => {
     await app.openDesktopWorkspace();
 
     app.updateActiveFile('print("dirty")\n');
-    app.deleteActiveFile();
+    await app.deleteActiveFile();
+    fixture.detectChanges();
 
-    expect(confirm).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('.app-confirm-modal')).toBeFalsy();
     expect(desktop.api.files.remove).not.toHaveBeenCalled();
     expect(app.workspaceNotice).toContain('SAVE OR RESOLVE BUFFER BEFORE DELETING');
   });
 
-  it('should confirm and delete saved desktop files', async () => {
+  it('should cancel saved desktop file deletion from the app confirmation modal', async () => {
     const desktop = createDesktopHarness({ 'main.py': 'print("ready")\n' });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     window.codeyo = desktop.api;
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
     fixture.detectChanges();
     await app.openDesktopWorkspace();
 
-    app.deleteActiveFile();
+    const deletion = app.deleteActiveFile();
+    fixture.detectChanges();
+
+    const modal = fixture.nativeElement.querySelector('.app-confirm-modal') as HTMLElement;
+    expect(modal.textContent).toContain('Delete file?');
+    expect(modal.textContent).toContain('This cannot be undone');
+    (modal.querySelector('.btn.ghost') as HTMLButtonElement).click();
+    await deletion;
+    fixture.detectChanges();
+
+    expect(desktop.api.files.remove).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('.app-confirm-modal')).toBeFalsy();
+  });
+
+  it('should confirm and delete saved desktop files', async () => {
+    const desktop = createDesktopHarness({ 'main.py': 'print("ready")\n' });
+    window.codeyo = desktop.api;
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    await app.openDesktopWorkspace();
+
+    const deletion = app.deleteActiveFile();
+    fixture.detectChanges();
+    const modal = fixture.nativeElement.querySelector('.app-confirm-modal') as HTMLElement;
+    expect(modal.textContent).toContain('Delete file?');
+    (modal.querySelector('.danger-action') as HTMLButtonElement).click();
+    await deletion;
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(desktop.api.files.remove).toHaveBeenCalledWith('workspace-1', 'main.py', true);
@@ -750,16 +1002,17 @@ describe('App', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(app.workspaceNotice).toContain('COULD NOT CREATE FILE');
 
-    vi.spyOn(window, 'prompt').mockReturnValue('src/main.py');
     vi.mocked(desktop.api.files.rename).mockRejectedValueOnce(new Error('Path is outside Codeyo editable file scope'));
     app.renameActiveFile();
+    expect(app.renamingFilePath).toBe('main.py');
+    app.renameDraft = 'src/main.py';
+    app.commitRename();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(app.workspaceNotice).toContain('COULD NOT RENAME FILE');
   });
 
   it('should rename desktop files into nested folders', async () => {
     const desktop = createDesktopHarness({ 'main.py': 'print("ready")\n' });
-    vi.spyOn(window, 'prompt').mockReturnValue('src/features/renamed.py');
     window.codeyo = desktop.api;
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
@@ -767,6 +1020,9 @@ describe('App', () => {
     await app.openDesktopWorkspace();
 
     app.renameActiveFile();
+    expect(app.renamingFilePath).toBe('main.py');
+    app.renameDraft = 'src/features/renamed.py';
+    app.commitRename();
     await new Promise((resolve) => setTimeout(resolve, 0));
     fixture.detectChanges();
 
@@ -778,6 +1034,43 @@ describe('App', () => {
     expect(app.activeIdeFile.path).toBe('src/features/renamed.py');
     expect(fixture.nativeElement.querySelector('.vscode-tree')?.textContent).toContain('features');
     expect(app.workspaceNotice).toContain('RENAMED FILE');
+  });
+
+  it('should commit and cancel inline rename from the explorer row', async () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    app.ideFiles.push({
+      name: 'scratch.py',
+      path: 'scratch.py',
+      lang: 'python',
+      status: 'new',
+      builtIn: false,
+      lines: ['print("scratch")'],
+    });
+    app.activeIdePath = 'scratch.py';
+    (app as unknown as { rebuildExplorerTree: () => void }).rebuildExplorerTree();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    app.renameActiveFile();
+    fixture.detectChanges();
+
+    const renameInput = fixture.nativeElement.querySelector('.rename-file-row input') as HTMLInputElement;
+    renameInput.value = 'src/renamed.py';
+    renameInput.dispatchEvent(new Event('input', { bubbles: true }));
+    const renameForm = fixture.nativeElement.querySelector('.rename-file-row') as HTMLFormElement;
+    renameForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+    expect(app.activeIdeFile.path).toBe('src/renamed.py');
+    expect(app.renamingFilePath).toBe('');
+
+    app.renameActiveFile();
+    fixture.detectChanges();
+    const cancelInput = fixture.nativeElement.querySelector('.rename-file-row input') as HTMLInputElement;
+    cancelInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+    expect(app.renamingFilePath).toBe('');
+    expect(app.activeIdeFile.path).toBe('src/renamed.py');
   });
 
   it('should quick-open buffers by path from the IDE keyboard', () => {
@@ -802,6 +1095,60 @@ describe('App', () => {
     app.handleEditorShortcut(new KeyboardEvent('keydown', { key: 'Enter' }));
     expect(app.quickOpenVisible).toBe(false);
     expect(app.activeIdeFile.path).toBe('src/lib/helper.py');
+  });
+
+  it('should jump to a requested editor line from the keyboard command', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+
+    app.updateEditorCursor({ line: 3, column: 5 });
+    app.handleEditorShortcut(new KeyboardEvent('keydown', { key: 'g', metaKey: true }));
+    expect(app.goToLineOpen).toBe(true);
+    expect(app.goToLineDraft).toBe('3');
+
+    const request = app.diagnosticRevealRequest;
+    app.goToLineDraft = '999';
+    app.submitGoToLine();
+    expect(app.goToLineOpen).toBe(false);
+    expect(app.diagnosticRevealLine).toBe(app.activeIdeFile.lines.length);
+    expect(app.diagnosticRevealColumn).toBe(1);
+    expect(app.diagnosticRevealRequest).toBe(request + 1);
+
+    app.openGoToLine();
+    app.goToLineDraft = 'abc';
+    app.submitGoToLine();
+    expect(app.workspaceNotice).toContain('GO TO LINE NEEDS A LINE NUMBER');
+  });
+
+  it('should expose editor status, search, and shortcut tools', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+
+    const ruler = fixture.nativeElement.querySelector('.editor-ruler') as HTMLElement;
+    expect(ruler.textContent).toContain('fib.py');
+    expect(ruler.textContent).toContain('Ln 1, Col 1');
+
+    const searchRequest = app.editorSearchRequest;
+    const searchButton = Array.from(ruler.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('Search')) as HTMLButtonElement;
+    searchButton.click();
+    expect(app.editorSearchRequest).toBe(searchRequest + 1);
+
+    const searchShortcut = new KeyboardEvent('keydown', { key: 'f', ctrlKey: true });
+    const preventDefault = vi.spyOn(searchShortcut, 'preventDefault');
+    app.handleEditorShortcut(searchShortcut);
+    expect(preventDefault).toHaveBeenCalled();
+    expect(app.editorSearchRequest).toBe(searchRequest + 2);
+
+    app.handleEditorShortcut(new KeyboardEvent('keydown', { key: '/', metaKey: true }));
+    fixture.detectChanges();
+    const shortcutPanel = fixture.nativeElement.querySelector('.shortcut-panel') as HTMLElement;
+    expect(shortcutPanel.textContent).toContain('Quick Open');
+    expect(shortcutPanel.textContent).toContain('Search');
+    expect(shortcutPanel.textContent).toContain('Go to Line');
+    expect(shortcutPanel.textContent).toContain('Save All');
   });
 
   it('should send the current buffer to the discussion for review', () => {
@@ -922,6 +1269,97 @@ describe('App', () => {
     expect(app.workspaceNotice).toContain('SAVE TO WRITE');
   });
 
+  it('should apply formatter edits to the active buffer when Format is invoked', async () => {
+    const desktop = createDesktopHarness({ 'main.cpp': 'int main(){return 0;}\n' });
+    window.codeyo = desktop.api;
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    await app.openDesktopWorkspace();
+    app.selectIdeFile('main.cpp');
+
+    desktop.api.language.formatDocument = vi.fn(async () => ({
+      available: true,
+      edit: {
+        edits: [
+          { path: 'main.cpp', startLine: 1, startColumn: 1, endLine: 1, endColumn: 22, newText: 'int main() {\n  return 0;\n}' },
+        ],
+      },
+    }));
+
+    await app.formatActiveDocument();
+
+    expect(app.activeEditorText).toBe('int main() {\n  return 0;\n}\n');
+    expect(app.workspaceNotice).toContain('FORMATTED');
+  });
+
+  it('should report a clear notice when the formatter is unavailable', async () => {
+    const desktop = createDesktopHarness({ 'main.cpp': 'int main(){return 0;}\n' });
+    window.codeyo = desktop.api;
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    await app.openDesktopWorkspace();
+    app.selectIdeFile('main.cpp');
+
+    desktop.api.language.formatDocument = vi.fn(async () => ({ available: false, reason: 'missing-tool' }));
+
+    await app.formatActiveDocument();
+
+    expect(app.activeEditorText).toBe('int main(){return 0;}\n');
+    expect(app.workspaceNotice).toContain('FORMAT UNAVAILABLE');
+    expect(app.workspaceNotice).toContain('FORMATTER TOOL NOT FOUND');
+  });
+
+  it('should format on save before writing when format-on-save is enabled', async () => {
+    const desktop = createDesktopHarness({ 'main.cpp': 'int main(){return 0;}\n' });
+    window.codeyo = desktop.api;
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    await app.openDesktopWorkspace();
+    app.selectIdeFile('main.cpp');
+
+    desktop.api.language.formatDocument = vi.fn(async () => ({
+      available: true,
+      edit: { edits: [{ path: 'main.cpp', startLine: 1, startColumn: 11, endLine: 1, endColumn: 11, newText: ' ' }] },
+    }));
+    app.setFormatOnSave(true);
+
+    app.saveCurrentFile();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(desktop.api.language.formatDocument).toHaveBeenCalled();
+    expect(desktop.api.files.write).toHaveBeenCalledWith(
+      'workspace-1',
+      expect.objectContaining({ path: 'main.cpp', content: 'int main() {return 0;}\n' }),
+    );
+  });
+
+  it('should not format on save when format-on-save is disabled', async () => {
+    const desktop = createDesktopHarness({ 'main.cpp': 'int main(){return 0;}\n' });
+    window.codeyo = desktop.api;
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    await app.openDesktopWorkspace();
+    app.selectIdeFile('main.cpp');
+
+    const formatSpy = vi.fn(async () => ({ available: true, edit: { edits: [] } }));
+    desktop.api.language.formatDocument = formatSpy;
+
+    app.saveCurrentFile();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(formatSpy).not.toHaveBeenCalled();
+    expect(desktop.api.files.write).toHaveBeenCalledWith(
+      'workspace-1',
+      expect.objectContaining({ path: 'main.cpp', content: 'int main(){return 0;}\n' }),
+    );
+  });
+
   it('should resume a recent trusted workspace without showing the native picker again', async () => {
     const desktop = createDesktopHarness({ 'main.py': 'print("ready")\n' });
     window.codeyo = desktop.api;
@@ -959,6 +1397,222 @@ describe('App', () => {
     expect(desktop.run).not.toHaveBeenCalled();
     expect(app.workspaceNotice).toContain('SAVE BEFORE RUNNING');
     expect(app.desktopOutput.join(' ')).toContain('UNSAVED BUFFER');
+    expect(app.pendingRunProfile?.entryFile).toBe('main.py');
+    expect(app.pendingRunDirtyPath).toBe('main.py');
+  });
+
+  it('should explain the active run profile and dirty save requirement in the console', async () => {
+    const desktop = createDesktopHarness({ 'main.py': 'print("on disk")\n' });
+    window.codeyo = desktop.api;
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    await app.openDesktopWorkspace();
+
+    app.updateActiveFile('print("not yet saved")\n');
+    app.runCode();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="run-status-profile"]')?.textContent)
+      .toContain('Run main.py');
+    expect(fixture.nativeElement.querySelector('[data-testid="run-status-entry"]')?.textContent)
+      .toContain('main.py');
+    expect(fixture.nativeElement.querySelector('[data-testid="run-status-toolchain"]')?.textContent)
+      .toContain('Interpreter');
+    expect(fixture.nativeElement.querySelector('[data-testid="run-status-inputs"]')?.textContent)
+      .toContain('Save required');
+  });
+
+  it('should save dirty desktop run inputs before executing a pending run', async () => {
+    const desktop = createDesktopHarness({ 'main.py': 'print("on disk")\n' });
+    window.codeyo = desktop.api;
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    await app.openDesktopWorkspace();
+
+    app.updateActiveFile('print("saved before run")\n');
+    app.runCode();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(desktop.run).not.toHaveBeenCalled();
+
+    await app.saveAndRunPending();
+
+    expect(desktop.api.files.write).toHaveBeenCalledWith(
+      'workspace-1',
+      expect.objectContaining({
+        path: 'main.py',
+        content: 'print("saved before run")\n',
+      }),
+    );
+    expect(desktop.run).toHaveBeenCalledWith(
+      'workspace-1',
+      expect.objectContaining({ entryFile: 'main.py' }),
+    );
+    expect(app.pendingRunProfile).toBeNull();
+    expect(app.workspaceNotice).toContain('RUN COMPLETE');
+  });
+
+  it('should show latest run evidence in the console run status', async () => {
+    const desktop = createDesktopHarness({ 'main.py': 'print("ready")\n' });
+    window.codeyo = desktop.api;
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    await app.openDesktopWorkspace();
+
+    app.runCode();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="run-status-inputs"]')?.textContent)
+      .toContain('Disk inputs clean');
+    expect(fixture.nativeElement.querySelector('[data-testid="run-status-evidence"]')?.textContent)
+      .toContain('main.py');
+    expect(fixture.nativeElement.querySelector('[data-testid="run-status-evidence"]')?.textContent)
+      .toContain('EXIT 0');
+  });
+
+  it('should summarize, filter, and open desktop diagnostics from Problems', async () => {
+    const desktop = createDesktopHarness({
+      'main.py': 'print("ready")\n',
+      'util.py': 'print("helper")\n',
+    });
+    window.codeyo = desktop.api;
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    await app.openDesktopWorkspace();
+
+    app.terminalPaneOpen = true;
+    app.activeConsolePanel = 'problems';
+    app.runDiagnostics = [
+      {
+        path: 'main.py',
+        line: 1,
+        column: 7,
+        severity: 'error',
+        message: 'expected semicolon',
+      },
+      {
+        path: 'util.py',
+        line: 2,
+        column: 1,
+        severity: 'warning',
+        message: 'unused helper',
+      },
+    ];
+    fixture.detectChanges();
+
+    const toolbar = fixture.nativeElement.querySelector('.problems-toolbar') as HTMLElement;
+    expect(toolbar.textContent).toContain('1 errors · 1 warnings');
+    expect(fixture.nativeElement.querySelectorAll('.problem-item').length).toBe(2);
+
+    const activeButton = Array.from(toolbar.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('Active')) as HTMLButtonElement;
+    activeButton.click();
+    fixture.detectChanges();
+
+    const activeProblems = fixture.nativeElement.querySelectorAll('.problem-item');
+    expect(app.problemFilter).toBe('active');
+    expect(activeProblems.length).toBe(1);
+    expect(activeProblems[0].textContent).toContain('main.py:1:7');
+
+    (activeProblems[0] as HTMLButtonElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(app.diagnosticRevealLine).toBe(1);
+    expect(app.diagnosticRevealColumn).toBe(7);
+  });
+
+  it('should merge and filter run, LSP, and spell diagnostics', async () => {
+    const desktop = createDesktopHarness({ 'main.py': 'print("ready")\n' });
+    window.codeyo = desktop.api;
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    await app.openDesktopWorkspace();
+
+    app.activeConsolePanel = 'problems';
+    app.terminalPaneOpen = true;
+    app.runDiagnostics = [{
+      path: 'main.py',
+      line: 1,
+      severity: 'error',
+      source: 'run',
+      message: 'run failed',
+    }];
+    app.lspDiagnostics = [{
+      path: 'main.py',
+      line: 1,
+      severity: 'warning',
+      source: 'lsp',
+      message: 'unknown name',
+    }];
+    app.spellDiagnostics = [{
+      path: 'main.py',
+      line: 1,
+      severity: 'warning',
+      source: 'spell',
+      message: 'Possible typo: "recieve"',
+    }];
+    fixture.detectChanges();
+
+    expect(app.allDiagnostics.length).toBe(3);
+    expect(fixture.nativeElement.querySelectorAll('.problem-item').length).toBe(3);
+
+    app.setProblemSourceFilter('spell');
+    expect(app.filteredRunDiagnostics.length).toBe(1);
+    expect(app.filteredRunDiagnostics[0].source).toBe('spell');
+
+    app.setSpellCheck(false);
+    expect(app.spellDiagnostics).toEqual([]);
+    expect(app.allDiagnostics.map((diagnostic) => diagnostic.source)).toEqual(['run', 'lsp']);
+  });
+
+  it('should send language completion requests with current content and spell regions', async () => {
+    const desktop = createDesktopHarness({ 'main.py': 'value = 1\n# recieve note\n' });
+    window.codeyo = desktop.api;
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    await app.openDesktopWorkspace();
+
+    const result = await app.languageCompletionProvider({ line: 1, column: 3 });
+
+    expect(result.items[0].label).toBe('print');
+    expect(desktop.api.language.completion).toHaveBeenCalledWith(
+      'workspace-1',
+      expect.objectContaining({
+        path: 'main.py',
+        language: 'python',
+        content: 'value = 1\n# recieve note\n',
+        line: 1,
+        column: 3,
+        spellRanges: expect.arrayContaining([expect.objectContaining({ text: ' recieve note' })]),
+      }),
+    );
+  });
+
+  it('should debounce language document changes after editing', async () => {
+    const desktop = createDesktopHarness({ 'main.py': 'print("ready")\n' });
+    window.codeyo = desktop.api;
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    await app.openDesktopWorkspace();
+
+    app.updateActiveFile('print("changed")\n# recieve note\n');
+    await new Promise((resolve) => setTimeout(resolve, 420));
+
+    expect(desktop.api.language.changeDocument).toHaveBeenCalledWith(
+      'workspace-1',
+      expect.objectContaining({
+        path: 'main.py',
+        content: 'print("changed")\n# recieve note\n',
+        spellRanges: expect.arrayContaining([expect.objectContaining({ text: ' recieve note' })]),
+      }),
+    );
   });
 
   it('should save all edited desktop buffers in one explicit action', async () => {
@@ -1191,7 +1845,6 @@ describe('App', () => {
     const desktop = createDesktopHarness({ 'main.py': 'print("disk")\n' });
     await desktop.api.files.backupRecovery('workspace-1', 'scratch.py', 'print("recovered")\n');
     window.codeyo = desktop.api;
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
     fixture.detectChanges();
@@ -1206,7 +1859,9 @@ describe('App', () => {
     expect(app.activeEditorText).toContain('recovered');
     expect(app.activeIdeFile.status).toBe('edited');
 
-    await app.discardRecovery(app.recoveryBuffers[0]);
+    const discard = app.discardRecovery(app.recoveryBuffers[0]);
+    clickAppConfirm(fixture, true);
+    await discard;
     expect(app.recoveryBufferCount).toBe(0);
     expect(desktop.api.files.clearRecovery).toHaveBeenCalledWith('workspace-1', 'scratch.py');
   });
@@ -1218,13 +1873,14 @@ describe('App', () => {
       throw new Error('recovery clear failed');
     });
     window.codeyo = desktop.api;
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
     fixture.detectChanges();
     await app.openDesktopWorkspace();
 
-    await app.discardRecovery(app.recoveryBuffers[0]);
+    const discard = app.discardRecovery(app.recoveryBuffers[0]);
+    clickAppConfirm(fixture, true);
+    await discard;
 
     expect(app.recoveryBufferCount).toBe(1);
     expect(app.workspaceNotice).toContain('COULD NOT DISCARD RECOVERY BUFFER');
@@ -1239,9 +1895,6 @@ describe('App', () => {
       imported: true,
     }));
     window.codeyo = desktop.api;
-    vi.spyOn(window, 'confirm')
-      .mockReturnValueOnce(true)
-      .mockReturnValueOnce(false);
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
     fixture.detectChanges();
@@ -1249,7 +1902,11 @@ describe('App', () => {
     vi.mocked(desktop.api.journal.list).mockRejectedValueOnce(new Error('journal refresh failed'));
     vi.mocked(desktop.api.files.listRecovery).mockRejectedValueOnce(new Error('recovery refresh failed'));
 
-    await app.migrateStorage('workspace-codeyo');
+    const migration = app.migrateStorage('workspace-codeyo');
+    clickAppConfirm(fixture, true);
+    await Promise.resolve();
+    clickAppConfirm(fixture, false);
+    await migration;
 
     expect(app.workspace?.storageMode).toBe('workspace-codeyo');
     expect(app.workspaceNotice).toContain('STORAGE MIGRATED');
@@ -1305,6 +1962,23 @@ describe('App', () => {
     expect(terminal.sessions[0].id).toBe('shell-restored');
     expect(terminal.sessions[0].buffer).toContain('1 passed');
     expect(terminal.activeSessionId).toBe('shell-restored');
+  });
+
+  it('should render a unified empty state when terminal is disabled', () => {
+    const desktop = createDesktopHarness(
+      { 'main.py': 'print("ready")\n' },
+      { trusted: false },
+    );
+    window.codeyo = desktop.api;
+    const fixture = TestBed.createComponent(DesktopTerminalComponent);
+    const terminal = fixture.componentInstance;
+    terminal.workspace = desktop.workspace;
+    terminal.enabled = false;
+    fixture.detectChanges();
+
+    const emptyState = fixture.nativeElement.querySelector('codeyo-empty-state') as HTMLElement;
+    expect(emptyState.textContent).toContain('Workspace not trusted');
+    expect(emptyState.textContent).toContain('Trust this folder');
   });
 
   it('should bound restored terminal buffers and sanitize tab titles', async () => {
@@ -1538,7 +2212,6 @@ describe('App', () => {
 
   it('should block branch switching with unsaved editor buffers', async () => {
     const desktop = createDesktopHarness({ 'main.py': 'print("ok")\n' });
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     window.codeyo = desktop.api;
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
@@ -1547,9 +2220,10 @@ describe('App', () => {
 
     app.updateActiveFile('print("dirty")\n');
     app.selectedBranch = 'feature/editor';
-    app.switchBranch();
+    await app.switchBranch();
+    fixture.detectChanges();
 
-    expect(confirm).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('.app-confirm-modal')).toBeFalsy();
     expect(desktop.api.git.action).not.toHaveBeenCalled();
     expect(app.gitNotice).toContain('SWITCH BRANCH BLOCKED');
   });
@@ -1562,7 +2236,6 @@ describe('App', () => {
       behind: 0,
       files: [{ index: ' ', workingTree: 'M', path: 'main.py' }],
     });
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     window.codeyo = desktop.api;
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
@@ -1570,15 +2243,17 @@ describe('App', () => {
     await app.openDesktopWorkspace();
 
     app.selectedBranch = 'feature/editor';
-    app.switchBranch();
+    const branchSwitch = app.switchBranch();
+    const modal = clickAppConfirm(fixture, false);
+    await branchSwitch;
 
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('Switch to feature/editor'));
+    expect(modal.textContent).toContain('Switch branch?');
+    expect(modal.textContent).toContain('feature/editor');
     expect(desktop.api.git.action).not.toHaveBeenCalled();
   });
 
   it('should confirm before deleting a selected local branch', async () => {
     const desktop = createDesktopHarness({ 'main.py': 'print("ok")\n' });
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     window.codeyo = desktop.api;
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
@@ -1586,10 +2261,13 @@ describe('App', () => {
     await app.openDesktopWorkspace();
 
     app.selectedBranch = 'feature/editor';
-    app.deleteSelectedBranch();
+    const deletion = app.deleteSelectedBranch();
+    const modal = clickAppConfirm(fixture, true);
+    await deletion;
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('Delete local branch feature/editor'));
+    expect(modal.textContent).toContain('Delete branch?');
+    expect(modal.textContent).toContain('feature/editor');
     expect(desktop.api.git.action).toHaveBeenCalledWith(
       'workspace-1',
       { type: 'delete-branch', name: 'feature/editor', confirmed: true },
@@ -1604,24 +2282,24 @@ describe('App', () => {
       behind: 1,
       files: [{ index: ' ', workingTree: 'M', path: 'main.py' }],
     });
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     window.codeyo = desktop.api;
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
     fixture.detectChanges();
     await app.openDesktopWorkspace();
 
-    app.pullRemote();
+    const pull = app.pullRemote();
+    const modal = clickAppConfirm(fixture, false);
+    await pull;
     app.pushRemote();
 
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('Pull with local changes'));
+    expect(modal.textContent).toContain('Pull with local changes?');
     expect(desktop.api.git.action).not.toHaveBeenCalled();
     expect(app.gitNotice).toContain('NO LOCAL COMMITS TO PUSH');
   });
 
   it('should block pull with unsaved editor buffers', async () => {
     const desktop = createDesktopHarness({ 'main.py': 'print("ok")\n' });
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     window.codeyo = desktop.api;
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
@@ -1629,9 +2307,10 @@ describe('App', () => {
     await app.openDesktopWorkspace();
 
     app.updateActiveFile('print("dirty")\n');
-    app.pullRemote();
+    await app.pullRemote();
+    fixture.detectChanges();
 
-    expect(confirm).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('.app-confirm-modal')).toBeFalsy();
     expect(desktop.api.git.action).not.toHaveBeenCalled();
     expect(app.gitNotice).toContain('PULL BLOCKED');
   });
@@ -2894,6 +3573,8 @@ describe('App', () => {
     expect(settings.textContent).toContain('Project Settings');
     expect(settings.textContent).toContain('Editor Density');
     expect(settings.textContent).toContain('Font Size');
+    expect(settings.textContent).toContain('Font Family');
+    expect(settings.textContent).toContain('Editor Theme');
     expect(settings.textContent).toContain('Toolchain');
     expect(settings.textContent).toContain('Safety');
     expect(settings.textContent).toContain('Auto Save');

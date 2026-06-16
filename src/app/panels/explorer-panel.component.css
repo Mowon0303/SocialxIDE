@@ -1,0 +1,413 @@
+.side-file-system {
+  background: var(--el-panel);
+  border: 0;
+  border-left: 1px solid var(--el-hairline);
+  color: var(--el-ink);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  min-height: calc(100% - 32px);
+  overflow: hidden;
+  padding: 0;
+}
+
+.side-file-system .explorer-heading {
+  align-items: center;
+  border-bottom: 1px solid var(--el-hairline);
+  color: var(--el-ink-2);
+  display: grid;
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 900;
+  gap: 0;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  height: 35px;
+  letter-spacing: 0.08em;
+  padding: 0 6px 0 12px;
+  position: relative;
+  text-transform: uppercase;
+}
+
+.side-file-system .explorer-actions-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  color: var(--el-ink-3);
+  cursor: pointer;
+  display: grid;
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 700;
+  height: 25px;
+  justify-content: center;
+  letter-spacing: 0;
+  padding: 0;
+  text-transform: none;
+  width: 28px;
+}
+
+.side-file-system .explorer-actions-toggle:hover,
+.side-file-system .explorer-actions-toggle.active {
+  background: var(--el-amber-soft);
+  color: var(--el-ink);
+}
+
+.side-file-system .explorer-actions-menu {
+  background: var(--el-panel);
+  border: 1px solid var(--el-hairline-strong);
+  border-radius: 2px;
+  box-shadow: 4px 5px 0 rgba(24, 22, 19, 0.12);
+  display: grid;
+  gap: 1px;
+  padding: 4px 0;
+  position: absolute;
+  right: 8px;
+  top: 31px;
+  width: 190px;
+  z-index: 90;
+}
+
+.side-file-system .explorer-actions-menu button {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--el-ink);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  min-height: 25px;
+  padding: 0 12px;
+  text-align: left;
+  text-transform: none;
+}
+
+.side-file-system .explorer-actions-menu button:hover,
+.side-file-system .explorer-actions-menu button:focus-visible {
+  background: var(--el-amber-soft);
+  color: var(--el-ink);
+  outline: none;
+}
+
+.side-file-system .explorer-actions-menu .danger-action {
+  color: var(--el-danger);
+}
+
+.side-file-system .explorer-actions-menu span {
+  border-top: 1px solid var(--el-hairline);
+  display: block;
+  margin: 4px 0;
+}
+
+.side-file-system .explorer-context-menu {
+  background: var(--el-panel);
+  border: 1px solid var(--el-hairline-strong);
+  border-radius: 2px;
+  box-shadow: 4px 5px 0 rgba(24, 22, 19, 0.16);
+  display: grid;
+  gap: 1px;
+  padding: 4px 0;
+  position: fixed;
+  width: 190px;
+  z-index: 160;
+}
+
+.side-file-system .explorer-context-menu button {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--el-ink);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  min-height: 25px;
+  padding: 0 12px;
+  text-align: left;
+  text-transform: none;
+}
+
+.side-file-system .explorer-context-menu button:hover,
+.side-file-system .explorer-context-menu button:focus-visible {
+  background: var(--el-amber-soft);
+  color: var(--el-ink);
+  outline: none;
+}
+
+.side-file-system .explorer-context-menu .danger-action {
+  color: var(--el-danger);
+}
+
+.side-file-system .explorer-context-menu span {
+  border-top: 1px solid var(--el-hairline);
+  display: block;
+  margin: 4px 0;
+}
+
+.side-file-system .vscode-tree {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  display: block;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 0 10px;
+}
+
+.side-file-system .tree-node {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--el-ink);
+  cursor: pointer;
+  display: grid;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 800;
+  gap: 0;
+  height: 24px;
+  letter-spacing: 0.02em;
+  min-height: 24px;
+  padding: 0 8px;
+  text-align: left;
+  text-transform: none;
+  width: 100%;
+}
+
+.side-file-system .tree-node:hover,
+.side-file-system .tree-node.file.active {
+  background: var(--el-amber-soft);
+  color: var(--el-ink);
+}
+
+.side-file-system .tree-node.folder {
+  color: var(--el-ink-2);
+  font-size: 10.5px;
+  font-weight: 900;
+  grid-template-columns: 18px minmax(0, 1fr);
+}
+
+.side-file-system .tree-node.folder.root {
+  color: var(--el-ink);
+  font-size: 10.5px;
+  font-weight: 700;
+  height: 27px;
+  letter-spacing: 0.02em;
+  min-height: 27px;
+  text-transform: uppercase;
+}
+
+.side-file-system .tree-node.file {
+  grid-template-columns: 30px minmax(0, 1fr) 20px;
+}
+
+.side-file-system .tree-caret {
+  color: var(--el-ink-3);
+  font-size: 18px;
+  line-height: 1;
+  text-align: center;
+}
+
+.side-file-system .tree-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.side-file-system .file-glyph {
+  color: var(--el-amber-deep);
+  font-size: 12px;
+  font-weight: 600;
+  padding-right: 8px;
+  text-align: right;
+}
+
+.side-file-system .file-glyph[data-kind="script"] {
+  color: var(--el-amber-deep);
+}
+
+.side-file-system .file-glyph[data-kind="html"] {
+  color: var(--el-peach-deep);
+}
+
+.side-file-system .file-glyph[data-kind="css"],
+.side-file-system .file-glyph[data-kind="markdown"] {
+  color: var(--el-cyan-deep);
+}
+
+.side-file-system .file-glyph[data-kind="python"] {
+  color: var(--el-green-deep);
+}
+
+.side-file-system .file-glyph[data-kind="cpp"] {
+  color: var(--el-lilac-deep);
+}
+
+.side-file-system .tree-node small {
+  color: var(--el-amber-deep);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.side-file-system .tree-empty {
+  border: 0;
+  color: var(--el-ink-3);
+  display: grid;
+  gap: 8px;
+  margin: 4px 8px;
+  padding: 10px;
+}
+
+.side-file-system .tree-empty span {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: none;
+}
+
+.side-file-system .tree-empty button {
+  background: var(--el-paper);
+  border: 1px solid var(--el-hairline-strong);
+  border-radius: 2px;
+  color: var(--el-ink);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  padding: 5px 7px;
+  text-transform: none;
+}
+
+.side-file-system .new-file-row,
+.side-file-system .rename-file-row {
+  align-items: center;
+  display: grid;
+  gap: 4px;
+  grid-template-columns: 22px minmax(0, 1fr) 24px 24px;
+  height: 27px;
+  padding: 0 8px 0 31px;
+}
+
+.side-file-system .rename-file-row {
+  grid-template-columns: 30px minmax(0, 1fr) 24px 24px;
+  padding-right: 8px;
+}
+
+.side-file-system .new-file-row span {
+  color: var(--el-amber-deep);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.side-file-system .new-file-row input,
+.side-file-system .rename-file-row input {
+  background: var(--el-paper-2);
+  border: 1px solid var(--el-amber-deep);
+  border-radius: 0;
+  color: var(--el-ink);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 400;
+  height: 22px;
+  letter-spacing: 0;
+  min-width: 0;
+  outline: none;
+  padding: 0 5px;
+  text-transform: none;
+}
+
+.side-file-system .new-file-row button,
+.side-file-system .rename-file-row button {
+  background: transparent;
+  border: 0;
+  border-radius: 2px;
+  color: var(--el-ink);
+  cursor: pointer;
+  display: grid;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  height: 22px;
+  justify-content: center;
+}
+
+.side-file-system .new-file-row button:hover,
+.side-file-system .rename-file-row button:hover {
+  background: var(--el-amber-soft);
+}
+
+.side-file-system .vscode-outline {
+  border-top: 1px solid var(--el-hairline);
+  flex: 0 0 auto;
+}
+
+.side-file-system .outline-heading {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--el-ink);
+  cursor: pointer;
+  display: grid;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 900;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  height: 32px;
+  letter-spacing: 0.02em;
+  padding: 0 8px;
+  text-align: left;
+  text-transform: uppercase;
+  width: 100%;
+}
+
+.side-file-system .outline-heading span {
+  color: var(--el-ink-3);
+  font-size: 18px;
+  text-align: center;
+}
+
+.side-file-system .outline-heading em {
+  color: var(--el-amber-deep);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.side-file-system .recovery-line {
+  align-items: center;
+  display: grid;
+  gap: 5px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  min-height: 26px;
+  padding: 0 8px 0 32px;
+}
+
+.side-file-system .recovery-line span {
+  color: var(--el-ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.side-file-system .recovery-line button {
+  background: transparent;
+  border: 0;
+  color: var(--el-cyan-deep);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 0 2px;
+}
