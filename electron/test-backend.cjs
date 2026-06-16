@@ -16,6 +16,7 @@ const {
   normalizeCompletionResult,
   normalizeDefinitionResult,
   normalizeLspDiagnostics,
+  normalizeTextEdits,
   positionInRegion,
   resolveLanguageServerCommand,
   sanitizeSpellRanges,
@@ -105,6 +106,7 @@ const {
   appendRunOutputTruncatedNotice,
   runOutputTruncatedMessage,
   runToolOutputBufferBytes,
+  stripRunOutputAnsi,
 } = require('./runner-output-policy.cjs');
 const {
   cleanupRunnerTempBuild,
@@ -435,6 +437,33 @@ test('runner output policy marks max-buffer truncation without duplicating notic
     { path: 'src/main.py', line: 1, severity: 'error', message: runOutputTruncatedMessage },
   ]);
   assert.equal(appendRunOutputTruncatedDiagnostic(withTruncation, 'src/main.py').length, 2);
+});
+
+test('runner output policy strips ANSI color so colored tracebacks stay parseable', () => {
+  const esc = String.fromCharCode(27);
+  const colored = [
+    'Traceback (most recent call last):',
+    `  File ${esc}[35m"/x/src/broken.py"${esc}[0m, line ${esc}[35m4${esc}[0m, in ${esc}[35m<module>${esc}[0m`,
+    `    ${esc}[31mexplode${esc}[0m${esc}[1;31m()${esc}[0m`,
+    `    ${esc}[31m~~~~~~~${esc}[0m${esc}[1;31m^^${esc}[0m`,
+    `${esc}[1;35mRuntimeError${esc}[0m: ${esc}[35mcodeyo problem e2e${esc}[0m`,
+    '',
+  ].join('\n');
+  const cleaned = stripRunOutputAnsi(colored);
+  assert.equal(cleaned.includes(esc), false);
+  assert.match(cleaned, /File "\/x\/src\/broken\.py", line 4/);
+  assert.match(cleaned, /RuntimeError: codeyo problem e2e/);
+  // Mirrors the parser regex in main.cjs parseDiagnostics; the colored input
+  // produces no match, the stripped input recovers the runtime diagnostic.
+  const python = /File "([^"]+)", line (\d+)(?:[\s\S]*?\n(?:.*\n)?([A-Za-z]+Error: .*))?/g;
+  assert.equal([...colored.matchAll(python)].length, 0);
+  const matches = [...cleaned.matchAll(python)];
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0][1], '/x/src/broken.py');
+  assert.equal(matches[0][2], '4');
+  assert.equal(matches[0][3], 'RuntimeError: codeyo problem e2e');
+  assert.equal(stripRunOutputAnsi(undefined), '');
+  assert.equal(stripRunOutputAnsi('plain [not ansi] text'), 'plain [not ansi] text');
 });
 
 test('runner temp policy creates and cleans a dedicated C++ build directory', async () => {
@@ -935,6 +964,21 @@ test('language service normalizes LSP payloads for renderer diagnostics and navi
     kind: 'function',
     apply: undefined,
   }]);
+
+  const edits = normalizeTextEdits([
+    {
+      range: { start: { line: 0, character: 0 }, end: { line: 0, character: 11 } },
+      newText: 'int main() {',
+    },
+    { range: { start: { line: 1, character: 0 }, end: { line: 1, character: 9 } }, newText: '  return 0;' },
+    null,
+    { newText: 'ignored without a range' },
+  ], 'src/main.cpp');
+  assert.deepEqual(edits, [
+    { path: 'src/main.cpp', startLine: 1, startColumn: 1, endLine: 1, endColumn: 12, newText: 'int main() {' },
+    { path: 'src/main.cpp', startLine: 2, startColumn: 1, endLine: 2, endColumn: 10, newText: '  return 0;' },
+  ]);
+  assert.deepEqual(normalizeTextEdits(null, 'src/main.cpp'), []);
 });
 
 test('language service maps spell issue offsets back into original document ranges', () => {

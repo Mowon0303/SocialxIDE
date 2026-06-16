@@ -165,7 +165,11 @@ class LanguageServiceManager {
       return { available: false, reason: 'missing-tool' };
     }
     await this.ensureDocumentSynced(workspace, client, safe);
-    return { available: false, reason: 'workspace-edit-application-pending' };
+    const result = await withTimeout(client.connection.sendRequest(protocol.DocumentFormattingRequest.type, {
+      textDocument: { uri: this.documentUri(workspace, safe.path) },
+      options: { tabSize: 2, insertSpaces: true },
+    }), lspRequestTimeoutMs, 'Formatting timed out');
+    return { available: true, edit: { edits: normalizeTextEdits(result, safe.path) } };
   }
 
   async checkSpelling(workspace, document) {
@@ -751,6 +755,24 @@ function fromLspRange(range) {
   };
 }
 
+function normalizeTextEdits(result, relativePath) {
+  const list = Array.isArray(result) ? result : [];
+  return list.map((edit) => {
+    if (!edit || !edit.range) {
+      return null;
+    }
+    const range = fromLspRange(edit.range);
+    return {
+      path: relativePath,
+      startLine: range.startLine,
+      startColumn: range.startColumn,
+      endLine: range.endLine,
+      endColumn: range.endColumn,
+      newText: typeof edit.newText === 'string' ? edit.newText : '',
+    };
+  }).filter(Boolean);
+}
+
 function markdownToPlainText(value) {
   if (!value) {
     return '';
@@ -832,6 +854,7 @@ module.exports = {
   normalizeDefinitionResult,
   normalizeHoverResult,
   normalizeLspDiagnostics,
+  normalizeTextEdits,
   positionInRegion,
   relativePathFromUri,
   resolveLanguageServerCommand,

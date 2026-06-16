@@ -93,6 +93,7 @@ const {
   appendRunOutputTruncatedNotice,
   runOutputTruncatedMessage,
   runToolOutputBufferBytes,
+  stripRunOutputAnsi,
 } = require('./runner-output-policy.cjs');
 const {
   cleanupRunnerTempBuild,
@@ -1724,9 +1725,10 @@ function toolLaunchFailureMessage(command, language, error) {
 
 function parseDiagnostics(output, rootPath) {
   const diagnostics = [];
+  const cleaned = stripRunOutputAnsi(output);
   const python = /File "([^"]+)", line (\d+)(?:[\s\S]*?\n(?:.*\n)?([A-Za-z]+Error: .*))?/g;
   const cpp = /^(.+?):(\d+):(\d+):\s+(warning|error):\s+(.+)$/gm;
-  for (const match of output.matchAll(python)) {
+  for (const match of cleaned.matchAll(python)) {
     const filePath = diagnosticPath(match[1], rootPath);
     if (!filePath) {
       continue;
@@ -1738,7 +1740,7 @@ function parseDiagnostics(output, rootPath) {
       message: match[3] || 'Python execution error',
     });
   }
-  for (const match of output.matchAll(cpp)) {
+  for (const match of cleaned.matchAll(cpp)) {
     const filePath = diagnosticPath(match[1], rootPath);
     if (!filePath) {
       continue;

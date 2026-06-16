@@ -38,10 +38,37 @@ app-root {
 
 .studio-shell.is-focused {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   height: 100dvh;
   min-height: 0;
   overflow: hidden;
+}
+
+.workspace-statusbar {
+  align-items: center;
+  background: var(--el-ink);
+  border-top: 2px solid var(--el-ink);
+  color: var(--el-paper);
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  gap: 10px;
+  letter-spacing: 0.04em;
+  min-height: 26px;
+  padding: 4px 16px;
+  text-transform: uppercase;
+}
+
+.workspace-statusbar-label {
+  flex: none;
+  font-weight: 700;
+  opacity: 0.55;
+}
+
+.workspace-statusbar-message {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .studio-nav {

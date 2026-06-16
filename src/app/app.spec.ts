@@ -156,6 +156,7 @@ function createDesktopHarness(
       completion: vi.fn(async () => ({ available: true, items: [{ label: 'print', kind: 'function' }] })),
       hover: vi.fn(async () => ({ available: true, contents: 'hover docs' })),
       definition: vi.fn(async () => ({ available: true, locations: [{ path: 'main.py', line: 1, column: 1 }] })),
+      formatDocument: vi.fn(async () => ({ available: true, edit: { edits: [] } })),
       onDiagnostics: vi.fn(() => () => undefined),
       onStatus: vi.fn(() => () => undefined),
     },
@@ -359,6 +360,22 @@ describe('App', () => {
     expect(compiled.querySelector('.side-file-system')).toBeTruthy();
     expect(compiled.querySelector('.codeyo-editor-host')?.getAttribute('aria-label')).toContain('fib.py');
     expect(compiled.querySelector('.cm-editor')).toBeTruthy();
+  });
+
+  it('should render workspace notices in the status bar so file errors are visible', async () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    expect(compiled.querySelector('[data-testid="workspace-statusbar"]')).toBeTruthy();
+
+    app.workspaceNotice = 'WORKSPACE FILE IS TOO LARGE · big.bin';
+    fixture.detectChanges();
+    expect(compiled.querySelector('[data-testid="workspace-notice"]')?.textContent).toContain(
+      'WORKSPACE FILE IS TOO LARGE',
+    );
   });
 
   it('should start the desktop app on a read-only README home before a folder is opened', async () => {
@@ -1250,6 +1267,97 @@ describe('App', () => {
     await app.resolveConflict(false);
     expect(app.activeIdeFile.missingOnDisk).toBe(true);
     expect(app.workspaceNotice).toContain('SAVE TO WRITE');
+  });
+
+  it('should apply formatter edits to the active buffer when Format is invoked', async () => {
+    const desktop = createDesktopHarness({ 'main.cpp': 'int main(){return 0;}\n' });
+    window.codeyo = desktop.api;
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    await app.openDesktopWorkspace();
+    app.selectIdeFile('main.cpp');
+
+    desktop.api.language.formatDocument = vi.fn(async () => ({
+      available: true,
+      edit: {
+        edits: [
+          { path: 'main.cpp', startLine: 1, startColumn: 1, endLine: 1, endColumn: 22, newText: 'int main() {\n  return 0;\n}' },
+        ],
+      },
+    }));
+
+    await app.formatActiveDocument();
+
+    expect(app.activeEditorText).toBe('int main() {\n  return 0;\n}\n');
+    expect(app.workspaceNotice).toContain('FORMATTED');
+  });
+
+  it('should report a clear notice when the formatter is unavailable', async () => {
+    const desktop = createDesktopHarness({ 'main.cpp': 'int main(){return 0;}\n' });
+    window.codeyo = desktop.api;
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    await app.openDesktopWorkspace();
+    app.selectIdeFile('main.cpp');
+
+    desktop.api.language.formatDocument = vi.fn(async () => ({ available: false, reason: 'missing-tool' }));
+
+    await app.formatActiveDocument();
+
+    expect(app.activeEditorText).toBe('int main(){return 0;}\n');
+    expect(app.workspaceNotice).toContain('FORMAT UNAVAILABLE');
+    expect(app.workspaceNotice).toContain('FORMATTER TOOL NOT FOUND');
+  });
+
+  it('should format on save before writing when format-on-save is enabled', async () => {
+    const desktop = createDesktopHarness({ 'main.cpp': 'int main(){return 0;}\n' });
+    window.codeyo = desktop.api;
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    await app.openDesktopWorkspace();
+    app.selectIdeFile('main.cpp');
+
+    desktop.api.language.formatDocument = vi.fn(async () => ({
+      available: true,
+      edit: { edits: [{ path: 'main.cpp', startLine: 1, startColumn: 11, endLine: 1, endColumn: 11, newText: ' ' }] },
+    }));
+    app.setFormatOnSave(true);
+
+    app.saveCurrentFile();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(desktop.api.language.formatDocument).toHaveBeenCalled();
+    expect(desktop.api.files.write).toHaveBeenCalledWith(
+      'workspace-1',
+      expect.objectContaining({ path: 'main.cpp', content: 'int main() {return 0;}\n' }),
+    );
+  });
+
+  it('should not format on save when format-on-save is disabled', async () => {
+    const desktop = createDesktopHarness({ 'main.cpp': 'int main(){return 0;}\n' });
+    window.codeyo = desktop.api;
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    fixture.detectChanges();
+    await app.openDesktopWorkspace();
+    app.selectIdeFile('main.cpp');
+
+    const formatSpy = vi.fn(async () => ({ available: true, edit: { edits: [] } }));
+    desktop.api.language.formatDocument = formatSpy;
+
+    app.saveCurrentFile();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(formatSpy).not.toHaveBeenCalled();
+    expect(desktop.api.files.write).toHaveBeenCalledWith(
+      'workspace-1',
+      expect.objectContaining({ path: 'main.cpp', content: 'int main(){return 0;}\n' }),
+    );
   });
 
   it('should resume a recent trusted workspace without showing the native picker again', async () => {

@@ -795,6 +795,7 @@
                           <button type="button" (click)="openEditorSearch()">Search</button>
                           <button type="button" (click)="openGoToLine()">Go Line</button>
                           <button type="button" (click)="goToDefinitionAtCursor()">Go Def</button>
+                          <button type="button" (click)="formatActiveDocument()">Format</button>
                           <button type="button" [class.active]="shortcutPanelOpen" (click)="toggleShortcutPanel()">Keys</button>
                         </nav>
                       </div>
@@ -1288,6 +1289,17 @@
     </section>
 
   </main>
+
+  <footer
+    class="workspace-statusbar"
+    data-testid="workspace-statusbar"
+    role="status"
+    aria-live="polite"
+    aria-label="Workspace status"
+  >
+    <span class="workspace-statusbar-label">Status</span>
+    <span class="workspace-statusbar-message" data-testid="workspace-notice">{{ workspaceNotice }}</span>
+  </footer>
 
   @if (confirmDialog) {
     <section

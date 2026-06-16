@@ -30,6 +30,7 @@ import {
   JournalEntry,
   LanguageCompletionResult,
   LanguageDefinitionLocation,
+  LanguageFormatResult,
   LanguageHoverResult,
   LanguageServiceStatus,
   LanguageWorkspaceStatus,
@@ -55,6 +56,7 @@ import {
   EditorThemeId,
 } from './editor-appearance';
 import { extractSpellCheckRegions } from './spell-regions';
+import { applyTextEdits } from './language-edits';
 import {
   ChannelItem,
   ChannelView,
@@ -2171,6 +2173,49 @@ export class App implements OnInit, OnDestroy {
     } catch (error) {
       this.workspaceNotice = this.desktopError(error, `GO TO DEFINITION FAILED · ${this.activeIdeFile.path}`);
       this.renderDesktopState();
+    }
+  }
+
+  async formatActiveDocument(): Promise<void> {
+    const file = this.activeIdeFile;
+    if (this.homeMode || !this.workspace?.trusted || !window.codeyo?.language || !this.isTrustedWorkspaceFile(file)) {
+      this.workspaceNotice = 'TRUSTED WORKSPACE FILE REQUIRED FOR FORMAT.';
+      this.renderDesktopState();
+      return;
+    }
+    let result: LanguageFormatResult;
+    try {
+      result = await window.codeyo.language.formatDocument(this.workspace.id, this.languageDocumentFor(file));
+    } catch (error) {
+      this.workspaceNotice = this.desktopError(error, `FORMAT FAILED · ${file.path}`);
+      this.renderDesktopState();
+      return;
+    }
+    if (!result.available) {
+      this.workspaceNotice = `FORMAT UNAVAILABLE · ${this.formatUnavailableReason(result.reason)} · ${file.path}`;
+      this.renderDesktopState();
+      return;
+    }
+    const before = file.lines.join('\n');
+    const after = result.edit ? applyTextEdits(before, result.edit.edits) : before;
+    if (after === before) {
+      this.workspaceNotice = `ALREADY FORMATTED · ${file.path}`;
+      this.renderDesktopState();
+      return;
+    }
+    this.updateActiveFile(after);
+    this.workspaceNotice = `FORMATTED · ${file.path}`;
+    this.renderDesktopState();
+  }
+
+  private formatUnavailableReason(reason?: string): string {
+    switch (reason) {
+      case 'missing-tool':
+        return 'FORMATTER TOOL NOT FOUND';
+      case 'python-formatter-unconfigured':
+        return 'PYTHON FORMATTER NOT CONFIGURED';
+      default:
+        return (reason || 'UNSUPPORTED').toUpperCase();
     }
   }
 
@@ -4347,6 +4392,23 @@ export class App implements OnInit, OnDestroy {
       this.workspaceNotice = 'TRUST WORKSPACE BEFORE WRITING SOURCE FILES.';
       this.renderDesktopState();
       return;
+    }
+    if (options.reason !== 'auto' && this.formatOnSaveEnabled && window.codeyo.language) {
+      try {
+        const formatResult = await window.codeyo.language.formatDocument(
+          this.workspace.id,
+          this.languageDocumentFor(file),
+        );
+        if (formatResult.available && formatResult.edit?.edits.length) {
+          const before = file.lines.join('\n');
+          const after = applyTextEdits(before, formatResult.edit.edits);
+          if (after !== before) {
+            file.lines = after.split('\n');
+          }
+        }
+      } catch {
+        // Format-on-save is best-effort; fall through to saving the current buffer.
+      }
     }
     const content = file.lines.join('\n');
     if (options.expectedContent !== undefined && options.expectedContent !== content) {
