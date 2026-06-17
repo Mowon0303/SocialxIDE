@@ -47,6 +47,20 @@ jobs:
         run: npm run desktop:rebuild
 
       - name: Desktop E2E (Playwright + Electron under xvfb)
-        run: xvfb-run -a npm run desktop:e2e
+        # 24-bit depth + a real screen size: the xvfb-run default is 8-bit,
+        # which makes Electron/Chromium render elements that never become
+        # "visible/stable" for Playwright.
+        run: xvfb-run -a --server-args="-screen 0 1920x1080x24" npm run desktop:e2e
         env:
           ELECTRON_DISABLE_SANDBOX: 1
+
+      - name: Upload E2E artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-playwright-report
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
